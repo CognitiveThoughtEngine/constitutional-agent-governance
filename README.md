@@ -275,12 +275,22 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 
 ## Links
 
+**This library:**
 - **35-Check Governance Checklist:** [checklist/CONSTITUTIONAL_GOVERNANCE_CHECKLIST.md](checklist/CONSTITUTIONAL_GOVERNANCE_CHECKLIST.md)
 - **agenthustler case study audit:** [examples/agenthustler_audit.md](examples/agenthustler_audit.md)
 - **Working example:** [examples/basic_agent.py](examples/basic_agent.py)
 - **Full configuration schema:** [governance.yaml](governance.yaml)
-- **GitHub:** [github.com/CognitiveThoughtEngine/constitutional-agent-governance](https://github.com/CognitiveThoughtEngine/constitutional-agent-governance)
-- **Constitutional Governance Review** (2-hour assessment, written report): [cteinvest.com](https://cteinvest.com)
+- **Roadmap:** [ROADMAP.md](ROADMAP.md)
+
+**Background reading:**
+- **Introducing constitutional-agent** — the WHY layer, what it covers, and the agenthustler audit: [cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html](https://www.cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html)
+- **WHO vs HOW: the AI agent governance gap** — why identity + policy enforcement is not enough: [cteinvest.com/blog/who-vs-how-ai-agent-governance-gap.html](https://www.cteinvest.com/blog/who-vs-how-ai-agent-governance-gap.html)
+- **The Six-Gate Architecture** — how the gate system works and why the ordering matters: [cteinvest.com/blog/six-gate-architecture.html](https://www.cteinvest.com/blog/six-gate-architecture.html)
+- **Why AI safety code must fail-closed** — the principle behind hard constraint design: [cteinvest.com/blog/why-ai-safety-code-must-fail-closed.html](https://www.cteinvest.com/blog/why-ai-safety-code-must-fail-closed.html)
+- **Constitutional vs behavioral governance** — the structural difference between a gate and a policy rule: [cteinvest.com/blog/constitutional-vs-behavioral-agent-governance.html](https://www.cteinvest.com/blog/constitutional-vs-behavioral-agent-governance.html)
+
+**Professional assessment:**
+- **Constitutional Governance Review** (2-hour assessment, written report, top 3 gaps + remediation roadmap): [cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html#assessment](https://www.cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html)
 
 **Research preprints (DOI):**
 - DLI Framework: [10.5281/zenodo.18217577](https://doi.org/10.5281/zenodo.18217577)
