@@ -1,7 +1,6 @@
 """
 Tests for Constitution — YAML loading, dry_run, amendment protocol.
 """
-import pathlib
 import tempfile
 
 import pytest

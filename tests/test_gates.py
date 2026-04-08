@@ -1,7 +1,6 @@
 """
 Tests for constitutional-agent gates and hard constraints.
 """
-import pytest
 from constitutional_agent.gates import (
     AutonomyGate,
     ConstitutionalGate,
