@@ -67,6 +67,23 @@ class EpistemicGate:
     DISAGREEMENT_FAIL = 0.55
     DISAGREEMENT_HOLD = 0.35
 
+    def __init__(
+        self,
+        *,
+        verification_fail: float = 0.50,
+        verification_hold: float = 0.70,
+        uncertainty_fail: float = 0.30,
+        assumption_volatility_hold: float = 0.25,
+        disagreement_fail: float = 0.55,
+        disagreement_hold: float = 0.35,
+    ) -> None:
+        self.VERIFICATION_FAIL = verification_fail
+        self.VERIFICATION_HOLD = verification_hold
+        self.UNCERTAINTY_FAIL = uncertainty_fail
+        self.ASSUMPTION_VOLATILITY_HOLD = assumption_volatility_hold
+        self.DISAGREEMENT_FAIL = disagreement_fail
+        self.DISAGREEMENT_HOLD = disagreement_hold
+
     def evaluate(self, metrics: dict[str, Any]) -> GateResult:
         """
         Evaluate epistemic health from the provided metrics dict.
@@ -210,6 +227,23 @@ class RiskGate:
     IRREVERSIBILITY_HOLD = 0.60
     CHANNEL_FAIL = 0.50
     CHANNEL_HOLD = 0.70
+
+    def __init__(
+        self,
+        *,
+        misuse_fail: float = 0.80,
+        misuse_hold: float = 0.65,
+        irreversibility_fail: float = 0.80,
+        irreversibility_hold: float = 0.60,
+        channel_fail: float = 0.50,
+        channel_hold: float = 0.70,
+    ) -> None:
+        self.MISUSE_FAIL = misuse_fail
+        self.MISUSE_HOLD = misuse_hold
+        self.IRREVERSIBILITY_FAIL = irreversibility_fail
+        self.IRREVERSIBILITY_HOLD = irreversibility_hold
+        self.CHANNEL_FAIL = channel_fail
+        self.CHANNEL_HOLD = channel_hold
 
     def evaluate(self, metrics: dict[str, Any]) -> GateResult:
         """
@@ -365,6 +399,21 @@ class GovernanceGate:
     METRIC_ANOMALY_HOLD = 0.60
     TEST_PASS_HOLD = 0.90
     TEST_PASS_FAIL = 0.70
+
+    def __init__(
+        self,
+        *,
+        audit_fail: float = 0.95,
+        metric_anomaly_fail: float = 0.80,
+        metric_anomaly_hold: float = 0.60,
+        test_pass_hold: float = 0.90,
+        test_pass_fail: float = 0.70,
+    ) -> None:
+        self.AUDIT_FAIL = audit_fail
+        self.METRIC_ANOMALY_FAIL = metric_anomaly_fail
+        self.METRIC_ANOMALY_HOLD = metric_anomaly_hold
+        self.TEST_PASS_HOLD = test_pass_hold
+        self.TEST_PASS_FAIL = test_pass_fail
 
     def evaluate(self, metrics: dict[str, Any]) -> GateResult:
         """
@@ -531,6 +580,43 @@ class EconomicGate:
     CHURN_HOLD = 0.08
     LTV_CAC_FAIL = 2.0
     LTV_CAC_HOLD = 3.0
+
+    def __init__(
+        self,
+        *,
+        runway_fail: float = 3.0,
+        runway_hold: float = 6.0,
+        dli_fail: float = 0.01,
+        dli_hold: float = 0.05,
+        return_rate_fail: float = 0.05,
+        return_rate_hold: float = 0.15,
+        value_demo_fail: int = 0,
+        value_demo_hold: int = 3,
+        margin_fail: float = 0.45,
+        margin_hold: float = 0.65,
+        cac_fail: float = 350.0,
+        cac_hold: float = 200.0,
+        churn_fail: float = 0.15,
+        churn_hold: float = 0.08,
+        ltv_cac_fail: float = 2.0,
+        ltv_cac_hold: float = 3.0,
+    ) -> None:
+        self.RUNWAY_FAIL = runway_fail
+        self.RUNWAY_HOLD = runway_hold
+        self.DLI_FAIL = dli_fail
+        self.DLI_HOLD = dli_hold
+        self.RETURN_RATE_FAIL = return_rate_fail
+        self.RETURN_RATE_HOLD = return_rate_hold
+        self.VALUE_DEMO_FAIL = value_demo_fail
+        self.VALUE_DEMO_HOLD = value_demo_hold
+        self.MARGIN_FAIL = margin_fail
+        self.MARGIN_HOLD = margin_hold
+        self.CAC_FAIL = cac_fail
+        self.CAC_HOLD = cac_hold
+        self.CHURN_FAIL = churn_fail
+        self.CHURN_HOLD = churn_hold
+        self.LTV_CAC_FAIL = ltv_cac_fail
+        self.LTV_CAC_HOLD = ltv_cac_hold
 
     def evaluate(self, metrics: dict[str, Any]) -> GateResult:
         """
@@ -830,6 +916,31 @@ class AutonomyGate:
     AUTO_RECOVERY_FAIL = 0.50
     AUTO_RECOVERY_HOLD = 0.70
 
+    def __init__(
+        self,
+        *,
+        human_minutes_fail: float = 120.0,
+        human_minutes_hold: float = 60.0,
+        decisions_fail: int = 10,
+        decisions_hold: int = 50,
+        activation_fail: float = 0.25,
+        activation_hold: float = 0.50,
+        escalations_fail: int = 10,
+        escalations_hold: int = 5,
+        auto_recovery_fail: float = 0.50,
+        auto_recovery_hold: float = 0.70,
+    ) -> None:
+        self.HUMAN_MINUTES_FAIL = human_minutes_fail
+        self.HUMAN_MINUTES_HOLD = human_minutes_hold
+        self.DECISIONS_FAIL = decisions_fail
+        self.DECISIONS_HOLD = decisions_hold
+        self.ACTIVATION_FAIL = activation_fail
+        self.ACTIVATION_HOLD = activation_hold
+        self.ESCALATIONS_FAIL = escalations_fail
+        self.ESCALATIONS_HOLD = escalations_hold
+        self.AUTO_RECOVERY_FAIL = auto_recovery_fail
+        self.AUTO_RECOVERY_HOLD = auto_recovery_hold
+
     def evaluate(self, metrics: dict[str, Any]) -> GateResult:
         """
         Evaluate autonomy health from the provided metrics dict.
@@ -1016,6 +1127,27 @@ class ConstitutionalGate:
     KNOWLEDGE_FAIL = 0.30
     ENFORCEMENT_HOLD = 0.70
     ENFORCEMENT_FAIL = 0.50
+
+    def __init__(
+        self,
+        *,
+        lessons_hold: int = 1,
+        bug_recurrence_hold: float = 0.15,
+        bug_recurrence_fail: float = 0.30,
+        amendments_hold: int = 1,
+        knowledge_hold: float = 0.50,
+        knowledge_fail: float = 0.30,
+        enforcement_hold: float = 0.70,
+        enforcement_fail: float = 0.50,
+    ) -> None:
+        self.LESSONS_HOLD = lessons_hold
+        self.BUG_RECURRENCE_HOLD = bug_recurrence_hold
+        self.BUG_RECURRENCE_FAIL = bug_recurrence_fail
+        self.AMENDMENTS_HOLD = amendments_hold
+        self.KNOWLEDGE_HOLD = knowledge_hold
+        self.KNOWLEDGE_FAIL = knowledge_fail
+        self.ENFORCEMENT_HOLD = enforcement_hold
+        self.ENFORCEMENT_FAIL = enforcement_fail
 
     def evaluate(self, metrics: dict[str, Any]) -> GateResult:
         """

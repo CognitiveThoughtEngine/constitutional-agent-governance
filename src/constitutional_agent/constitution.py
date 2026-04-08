@@ -217,6 +217,7 @@ class Constitution:
         self,
         context: dict[str, Any],
         raise_on_hc_violation: bool = False,
+        dry_run: bool = False,
     ) -> ConstitutionResult:
         """
         Evaluate all gates and hard constraints against the provided context.
@@ -232,6 +233,11 @@ class Constitution:
             raise_on_hc_violation: If True, raises ConstitutionalViolation
                      when any hard constraint is violated, instead of
                      returning the violation in the result. Default: False.
+            dry_run: If True, evaluate all gates and constraints but do NOT
+                     short-circuit on hard constraint violations and do NOT
+                     record the evaluation in history. Returns what *would*
+                     happen if enforcement were active. Useful for calibrating
+                     thresholds before enabling enforcement. Default: False.
 
         Returns:
             ConstitutionResult with system_state, gate_results,
@@ -239,7 +245,7 @@ class Constitution:
 
         Raises:
             ConstitutionalViolation: If raise_on_hc_violation=True and any
-                     hard constraint is violated.
+                     hard constraint is violated (ignored in dry_run mode).
         """
         # 1. Check hard constraints first — they are absolute
         hc_results = check_hard_constraints(context, self._hard_constraints)
@@ -256,8 +262,8 @@ class Constitution:
             for r in violated_hcs
         ]
 
-        # 2. Hard constraint violations short-circuit to STOP
-        if violated_hcs:
+        # 2. Hard constraint violations short-circuit to STOP (skipped in dry_run)
+        if violated_hcs and not dry_run:
             if raise_on_hc_violation:
                 raise ConstitutionalViolation(violated_hcs)
 
@@ -299,7 +305,8 @@ class Constitution:
             targets_met=targets_met,
             summary=summary,
         )
-        self._record_evaluation(context, result)
+        if not dry_run:
+            self._record_evaluation(context, result)
         return result
 
     def propose_amendment(
@@ -413,18 +420,82 @@ class Constitution:
         """
         Build a SixGateEvaluator from governance.yaml config.
 
-        Currently uses default gate instances. Future versions will apply
-        YAML-configured threshold overrides per gate.
+        Applies YAML-configured threshold overrides per gate. Missing keys
+        fall back to production-validated defaults. All threshold overrides
+        are additive — you only need to specify values you want to change.
         """
-        # Gate customization from config can be added here.
-        # For now, use the production-validated defaults.
+        g = config.get("gates", {})
+
+        def _f(section: str, key: str, default: float) -> float:
+            return float(g.get(section, {}).get(key, default))
+
+        def _i(section: str, key: str, default: int) -> int:
+            return int(g.get(section, {}).get(key, default))
+
+        # Pre-revenue and post-revenue sub-sections for EconomicGate
+        pre = g.get("economic", {}).get("pre_revenue", {})
+        post = g.get("economic", {}).get("post_revenue", {})
+
+        def _pre(key: str, default: float) -> float:
+            return float(pre.get(key, default))
+
+        def _post(key: str, default: float) -> float:
+            return float(post.get(key, default))
+
         return SixGateEvaluator(
-            epistemic=EpistemicGate(),
-            risk=RiskGate(),
-            governance=GovernanceGate(),
-            economic=EconomicGate(),
-            autonomy=AutonomyGate(),
-            constitutional=ConstitutionalGate(),
+            epistemic=EpistemicGate(
+                verification_fail=_f("epistemic", "fail_threshold", 0.50),
+                verification_hold=_f("epistemic", "hold_threshold", 0.70),
+                disagreement_fail=_f("epistemic", "disagreement_fail", 0.55),
+                disagreement_hold=_f("epistemic", "disagreement_hold", 0.35),
+            ),
+            risk=RiskGate(
+                misuse_fail=_f("risk", "misuse_fail", 0.80),
+                misuse_hold=_f("risk", "misuse_hold", 0.65),
+                channel_fail=_f("risk", "channel_fail", 0.50),
+                channel_hold=_f("risk", "channel_hold", 0.70),
+            ),
+            governance=GovernanceGate(
+                audit_fail=_f("governance", "audit_fail_threshold", 0.95),
+                test_pass_hold=_f("governance", "test_hold", 0.90),
+                test_pass_fail=_f("governance", "test_fail", 0.70),
+            ),
+            economic=EconomicGate(
+                runway_fail=_pre("runway_fail_months", 3.0),
+                runway_hold=_pre("runway_hold_months", 6.0),
+                dli_fail=_pre("dli_completion_fail", 0.01),
+                dli_hold=_pre("dli_completion_hold", 0.05),
+                return_rate_fail=_pre("user_return_rate_fail", 0.05),
+                return_rate_hold=_pre("user_return_rate_hold", 0.15),
+                value_demo_fail=int(_pre("value_demo_fail", 0)),
+                value_demo_hold=int(_pre("value_demo_hold", 3)),
+                margin_fail=_post("gross_margin_fail", 0.45),
+                margin_hold=_post("gross_margin_hold", 0.65),
+                cac_fail=_post("cac_fail", 350.0),
+                cac_hold=_post("cac_hold", 200.0),
+                churn_fail=_post("churn_fail", 0.15),
+                churn_hold=_post("churn_hold", 0.08),
+                ltv_cac_fail=_post("ltv_cac_fail", 2.0),
+                ltv_cac_hold=_post("ltv_cac_hold", 3.0),
+            ),
+            autonomy=AutonomyGate(
+                human_minutes_fail=_f("autonomy", "human_minutes_fail", 120.0),
+                human_minutes_hold=_f("autonomy", "human_minutes_hold", 60.0),
+                decisions_fail=_i("autonomy", "decisions_fail", 10),
+                decisions_hold=_i("autonomy", "decisions_hold", 50),
+                activation_fail=_f("autonomy", "activation_fail", 0.25),
+                activation_hold=_f("autonomy", "activation_hold", 0.50),
+            ),
+            constitutional=ConstitutionalGate(
+                lessons_hold=_i("constitutional", "lessons_hold", 1),
+                bug_recurrence_fail=_f("constitutional", "bug_recurrence_fail", 0.30),
+                bug_recurrence_hold=_f("constitutional", "bug_recurrence_hold", 0.15),
+                amendments_hold=_i("constitutional", "amendments_hold", 1),
+                knowledge_fail=_f("constitutional", "freshness_fail", 0.30),
+                knowledge_hold=_f("constitutional", "freshness_hold", 0.50),
+                enforcement_fail=_f("constitutional", "enforcement_fail", 0.50),
+                enforcement_hold=_f("constitutional", "enforcement_hold", 0.70),
+            ),
         )
 
     @staticmethod
