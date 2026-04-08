@@ -1,0 +1,180 @@
+# Constitutional Governance Configuration
+# ----------------------------------------
+# Adapt this to your agent's specific context.
+# See examples/governance.yaml for a complete annotated example.
+#
+# Load with: constitution = Constitution.load("governance.yaml")
+
+version: "1.0"
+organization: "YourOrg"
+agent_name: "YourAgent"
+
+# ---------------------------------------------------------------------------
+# Hard Constraints — Absolute prohibitions, never overridable by any agent
+# ---------------------------------------------------------------------------
+# These are enforced programmatically, not as policy files.
+# Missing from this list: still enforced via BUILTIN_HARD_CONSTRAINTS.
+# Add org-specific constraints as needed.
+
+hard_constraints:
+  - id: HC-1
+    description: "No deploy when tests fail"
+    check_key: "failing_tests"
+    check_op: "eq"
+    check_value: 0
+    remedy: "Fix failing tests before any deployment"
+
+  - id: HC-11
+    description: "No silent outage exceeding 24 hours"
+    check_key: "hours_since_last_execution"
+    check_op: "lt"
+    check_value: 24
+    remedy: "Alert human operator. Diagnose root cause before resuming."
+
+  - id: HC-12
+    description: "No gate override without ratified amendment"
+    check_key: "gate_override_without_amendment"
+    check_op: "eq"
+    check_value: false
+    remedy: "Submit and ratify an amendment before changing gate behavior"
+
+# ---------------------------------------------------------------------------
+# Gate Configuration
+# ---------------------------------------------------------------------------
+# All gates are enabled by default with production-validated thresholds.
+# Override individual thresholds here. Omit a gate block to use defaults.
+
+gates:
+
+  epistemic:
+    enabled: true
+    # verification_pass_rate: fraction of decisions externally verified
+    hold_threshold: 0.70      # HOLD if verification_pass_rate < 0.70
+    fail_threshold: 0.50      # FAIL if verification_pass_rate < 0.50
+    # disagreement_persistence: unresolved contradictions
+    disagreement_hold: 0.35
+    disagreement_fail: 0.55
+
+  risk:
+    enabled: true
+    # misuse_risk_index: probability outbound actions cause harm (0-1)
+    misuse_hold: 0.65
+    misuse_fail: 0.80
+    # channel_health: outbound channel success rate (0-1)
+    channel_hold: 0.70
+    channel_fail: 0.50
+
+  governance:
+    enabled: true
+    # audit_coverage: fraction of expected events logged
+    audit_fail_threshold: 0.95    # High bar — gaps hide problems
+    # test_pass_rate: fraction of governance tests passing
+    test_hold: 0.90
+    test_fail: 0.70
+
+  economic:
+    enabled: true
+    # stage: 'pre_revenue' evaluates value creation
+    #         'post_revenue' evaluates unit economics
+    stage: "pre_revenue"
+
+    pre_revenue:
+      runway_hold_months: 6.0
+      runway_fail_months: 3.0
+      dli_completion_hold: 0.05   # 5%
+      dli_completion_fail: 0.01   # 1%
+      user_return_rate_hold: 0.15 # 15%
+      user_return_rate_fail: 0.05 # 5%
+      value_demo_hold: 3
+      value_demo_fail: 0
+
+    post_revenue:
+      runway_hold_months: 6.0
+      runway_fail_months: 3.0
+      gross_margin_hold: 0.65    # 65%
+      gross_margin_fail: 0.45    # 45%
+      cac_hold: 200              # $200
+      cac_fail: 350              # $350
+      churn_hold: 0.08           # 8%/month
+      churn_fail: 0.15           # 15%/month
+      ltv_cac_hold: 3.0
+      ltv_cac_fail: 2.0
+
+  autonomy:
+    enabled: true
+    # human_minutes_per_day: operator time on agent work
+    human_minutes_hold: 60.0
+    human_minutes_fail: 120.0
+    # decisions_per_day: autonomous decisions without human input
+    decisions_hold: 50
+    decisions_fail: 10
+    # agent_activation_rate: fraction of agents running each cycle
+    activation_hold: 0.50
+    activation_fail: 0.25
+
+  constitutional:
+    enabled: true
+    # lessons_learned_weekly: documented lessons this week
+    lessons_hold: 1
+    lessons_fail: 0           # Zero lessons = constitutionally dead
+    # amendments_per_month: governance rules evolved
+    amendments_hold: 1
+    amendments_fail: 0
+    # knowledge_freshness: docs updated in 30d / total docs
+    freshness_hold: 0.50
+    freshness_fail: 0.30
+    # enforcement_coverage: automated constraint coverage
+    enforcement_hold: 0.70
+    enforcement_fail: 0.50
+
+# ---------------------------------------------------------------------------
+# System States
+# ---------------------------------------------------------------------------
+# Reference only — states are computed from gate results, not configured.
+
+states:
+  COMPOUND: "All gates PASS + all stretch targets met → maximum growth mode"
+  RUN:      "All gates PASS → normal autonomous operation"
+  THROTTLE: "Any gate HOLD → conserve resources, skip discretionary spend"
+  FREEZE:   "Any gate FAIL → stop all discretionary spend until resolved"
+  STOP:     "Hard constraint violated → immediate human intervention required"
+
+# ---------------------------------------------------------------------------
+# Stretch Targets (for COMPOUND state)
+# ---------------------------------------------------------------------------
+# COMPOUND state requires ALL gates PASS + context['targets_met'] = True.
+# Set targets_met based on your own target evaluation logic.
+
+targets:
+  description: >
+    Stretch targets define COMPOUND state (maximum growth).
+    They are 10X the floor targets. "Never reduce a target. Increase action."
+  examples:
+    - metric: users
+      floor: 200
+      stretch: 2000
+    - metric: mrr_usd
+      floor: 2400
+      stretch: 24000
+    - metric: dli_completion_rate
+      floor: 0.40
+      stretch: 0.70
+
+# ---------------------------------------------------------------------------
+# Amendment Process
+# ---------------------------------------------------------------------------
+# Amendments change gates. Hard constraints require the highest authority.
+
+amendments:
+  process:
+    - "Agent calls constitution.propose_amendment() with description + rationale"
+    - "Amendment is logged as PENDING — not applied"
+    - "Designated authority reviews and calls constitution.ratify_amendment()"
+    - "Ratified amendments take effect on next restart or hot-reload"
+  authority:
+    gate_amendments: "Engineering lead or equivalent"
+    hard_constraint_amendments: "CEO / board — highest authority only"
+  hard_constraint_note: >
+    Hard constraints (HC-*) can only be amended with CEO/board ratification.
+    No agent, no engineering lead, no pressure of circumstance authorizes
+    bypassing a hard constraint without formal ratification.
