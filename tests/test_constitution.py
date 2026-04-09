@@ -761,3 +761,93 @@ def test_ratify_amendment_status_not_set_before_config_merge():
     c.ratify_amendment(aid, ratified_by="CEO")
     # Callback fires AFTER status is set
     assert calls == ["RATIFIED"]
+
+
+# ---------------------------------------------------------------------------
+# YAML HC operators: lt, lte, gt
+# ---------------------------------------------------------------------------
+
+def test_yaml_hard_constraints_lt_op():
+    """YAML HC with 'lt' op: violated when value is >= threshold (must be < threshold)."""
+    config = {
+        "hard_constraints": [
+            {
+                "id": "HC-ORG-LT",
+                "description": "Error rate must be less than 5%",
+                "check_key": "error_rate",
+                "check_op": "lt",
+                "check_value": 0.05,
+                "remedy": "Reduce error rate",
+            }
+        ]
+    }
+    c = Constitution(config=config)
+    # 8% errors violates the 'must be < 5%' constraint
+    result = c.evaluate({"error_rate": 0.08, "failing_tests": 0, "hours_since_last_execution": 1})
+    assert any(v.constraint_id == "HC-ORG-LT" for v in result.hard_constraint_violations)
+    # 3% errors satisfies the constraint
+    result_ok = c.evaluate({"error_rate": 0.03, "failing_tests": 0, "hours_since_last_execution": 1})
+    assert not any(v.constraint_id == "HC-ORG-LT" for v in result_ok.hard_constraint_violations)
+
+
+def test_yaml_hard_constraints_lte_op():
+    """YAML HC with 'lte' op: violated when value is > threshold (must be <= threshold)."""
+    config = {
+        "hard_constraints": [
+            {
+                "id": "HC-ORG-LTE",
+                "description": "Burn rate must be at most 50% of budget",
+                "check_key": "burn_ratio",
+                "check_op": "lte",
+                "check_value": 0.50,
+                "remedy": "Reduce spending",
+            }
+        ]
+    }
+    c = Constitution(config=config)
+    # 60% burn violates the 'must be <= 50%' constraint
+    result = c.evaluate({"burn_ratio": 0.60, "failing_tests": 0, "hours_since_last_execution": 1})
+    assert any(v.constraint_id == "HC-ORG-LTE" for v in result.hard_constraint_violations)
+    # Exactly 50% does not violate (boundary: lte allows equality)
+    result_ok = c.evaluate({"burn_ratio": 0.50, "failing_tests": 0, "hours_since_last_execution": 1})
+    assert not any(v.constraint_id == "HC-ORG-LTE" for v in result_ok.hard_constraint_violations)
+
+
+def test_yaml_hard_constraints_gt_op():
+    """YAML HC with 'gt' op: violated when value is <= threshold (must be > threshold)."""
+    config = {
+        "hard_constraints": [
+            {
+                "id": "HC-ORG-GT",
+                "description": "Test coverage must be greater than 80%",
+                "check_key": "test_coverage",
+                "check_op": "gt",
+                "check_value": 0.80,
+                "remedy": "Increase test coverage",
+            }
+        ]
+    }
+    c = Constitution(config=config)
+    # 70% coverage violates the 'must be > 80%' constraint
+    result = c.evaluate({"test_coverage": 0.70, "failing_tests": 0, "hours_since_last_execution": 1})
+    assert any(v.constraint_id == "HC-ORG-GT" for v in result.hard_constraint_violations)
+    # 90% coverage satisfies the constraint
+    result_ok = c.evaluate({"test_coverage": 0.90, "failing_tests": 0, "hours_since_last_execution": 1})
+    assert not any(v.constraint_id == "HC-ORG-GT" for v in result_ok.hard_constraint_violations)
+
+
+# ---------------------------------------------------------------------------
+# _validate_metrics: negative positive-metric warning
+# ---------------------------------------------------------------------------
+
+def test_validate_metrics_warns_on_negative_positive_metric():
+    """A negative runway_months should trigger a UserWarning (not raise)."""
+    import warnings as _warnings
+    c = Constitution.from_defaults()
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter("always")
+        c.evaluate({**HEALTHY, "runway_months": -1.0})
+    assert any(
+        "runway_months" in str(w.message) and issubclass(w.category, UserWarning)
+        for w in caught
+    ), "Expected a UserWarning about negative runway_months"

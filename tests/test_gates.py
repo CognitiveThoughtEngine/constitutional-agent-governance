@@ -596,14 +596,32 @@ def test_constitutionalgate_enforcement_hold():
     result = ConstitutionalGate().evaluate({"lessons_learned_weekly": 2, "amendments_per_month": 1, "enforcement_coverage": 0.60})
     assert result.state == GateState.HOLD
 
-def test_known_gate_metrics_contains_gate_keys():
+def test_known_gate_metrics_exact_set():
+    """_KNOWN_GATE_METRICS must exactly match the keys read by built-in gates.
+
+    Guards against both missing additions (new metric added to a gate but not here)
+    and stale removals (metric removed from all gates but still listed here).
+    When this test fails, update _KNOWN_GATE_METRICS in constitution.py to match.
+    """
     from constitutional_agent.constitution import _KNOWN_GATE_METRICS
-    expected = {
+    expected = frozenset({
+        # EpistemicGate
         "uncertainty_disclosure_rate", "verification_pass_rate",
-        "misuse_risk_index", "lessons_learned_weekly",
-        "runway_months", "gross_margin",
-        "agent_activation_rate", "decisions_per_day",
-        "sign_resolution_rate", "failing_tests", "hours_since_last_execution",
-    }
+        # RiskGate
+        "misuse_risk_index",
+        # GovernanceGate
+        "gaming_incidents_7d", "lessons_learned_weekly",
+        # EconomicGate
+        "runway_months", "gross_margin", "burn_coverage",
+        # AutonomyGate
+        "agent_activation_rate", "decisions_per_day", "human_minutes_per_day",
+        # ConstitutionalGate
+        "sign_resolution_rate", "circuit_open_minutes_per_day",
+        # Used as defaults by Constitution.from_defaults()
+        "failing_tests", "hours_since_last_execution",
+    })
+    stale = _KNOWN_GATE_METRICS - expected
     missing = expected - _KNOWN_GATE_METRICS
-    assert not missing, f"Missing from _KNOWN_GATE_METRICS: {missing}"
+    assert _KNOWN_GATE_METRICS == expected, (
+        f"Extra (stale): {stale} | Missing (new): {missing}"
+    )
