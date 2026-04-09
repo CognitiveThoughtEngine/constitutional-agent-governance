@@ -95,7 +95,8 @@ class ConstitutionResult:
         system_state:       Composite state derived from all gate results.
         gate_results:       Ordered list of individual gate evaluations.
         hard_constraint_violations: Any HC violations found (STOP-level).
-        blocking_gate:      First FAIL gate, if any.
+        blocking_gate:      First FAIL gate, if any (kept for backwards compat).
+        blocking_gates:     ALL FAIL gates (may be more than one).
         hold_gates:         All HOLD gates, if any.
         targets_met:        True if all stretch targets are satisfied
                             (required for COMPOUND state).
@@ -109,3 +110,4 @@ class ConstitutionResult:
     hold_gates: list[GateResult]
     targets_met: bool
     summary: str
+    blocking_gates: list[GateResult] = field(default_factory=list)

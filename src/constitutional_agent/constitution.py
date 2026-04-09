@@ -30,9 +30,10 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import yaml
 
@@ -58,6 +59,27 @@ from constitutional_agent.schema import (
     HardConstraintViolation,
     SystemState,
 )
+
+
+class _DisabledGate:
+    """
+    Stub gate that always returns PASS.
+
+    Used when a gate is disabled via ``enabled: false`` in governance.yaml.
+    Disabled gates are treated as unconditionally healthy so they never
+    block the system.  Disable gates only through formal governance — not
+    as a workaround for noisy thresholds.
+    """
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def evaluate(self, metrics: dict[str, Any]) -> GateResult:
+        return GateResult(
+            gate=self._name,
+            state=GateState.PASS,
+            reason="Disabled via governance.yaml",
+        )
 
 
 class ConstitutionalViolation(Exception):
@@ -93,6 +115,7 @@ class AmendmentProposal:
         rationale: str,
         affected_sections: list[str],
         proposed_by: str = "agent",
+        changes: Optional[dict[str, Any]] = None,
     ) -> None:
         self.id = f"AMEND-{uuid.uuid4().hex[:8].upper()}"
         self.description = description
@@ -103,6 +126,7 @@ class AmendmentProposal:
         self.status = "PENDING"
         self.ratified_at: Optional[str] = None
         self.ratified_by: Optional[str] = None
+        self.changes: Optional[dict[str, Any]] = changes
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -115,6 +139,7 @@ class AmendmentProposal:
             "status": self.status,
             "ratified_at": self.ratified_at,
             "ratified_by": self.ratified_by,
+            "changes": self.changes,
         }
 
 
@@ -152,16 +177,27 @@ class Constitution:
         config: dict[str, Any],
         evaluator: Optional[SixGateEvaluator] = None,
         hard_constraints: Optional[list[HardConstraint]] = None,
+        strict_mode: bool = False,
+        on_evaluate: Optional[Callable[["ConstitutionResult"], None]] = None,
+        on_amendment_ratified: Optional[Callable[[dict[str, Any]], None]] = None,
     ) -> None:
         self._config = config
         self._evaluator = evaluator or self._build_evaluator(config)
-        self._hard_constraints = (
+        # Start with builtins (or caller-supplied list), then append YAML-defined HCs
+        self._hard_constraints = list(
             hard_constraints
             if hard_constraints is not None
             else BUILTIN_HARD_CONSTRAINTS
         )
+        yaml_hcs = self._parse_yaml_hard_constraints(
+            config.get("hard_constraints", [])
+        )
+        self._hard_constraints.extend(yaml_hcs)
         self._amendments: list[AmendmentProposal] = []
         self._evaluation_history: list[dict[str, Any]] = []
+        self._strict_mode = strict_mode
+        self._on_evaluate = on_evaluate
+        self._on_amendment_ratified = on_amendment_ratified
 
     @classmethod
     def load(cls, path: str | Path) -> "Constitution":
@@ -218,7 +254,8 @@ class Constitution:
         context: dict[str, Any],
         raise_on_hc_violation: bool = False,
         dry_run: bool = False,
-    ) -> ConstitutionResult:
+        strict_mode: Optional[bool] = None,
+    ) -> "ConstitutionResult":
         """
         Evaluate all gates and hard constraints against the provided context.
 
@@ -238,6 +275,10 @@ class Constitution:
                      record the evaluation in history. Returns what *would*
                      happen if enforcement were active. Useful for calibrating
                      thresholds before enabling enforcement. Default: False.
+            strict_mode: If True (or if the instance was created with
+                     strict_mode=True), an empty context immediately returns
+                     THROTTLE. Overrides the instance-level setting when
+                     provided explicitly.
 
         Returns:
             ConstitutionResult with system_state, gate_results,
@@ -247,6 +288,32 @@ class Constitution:
             ConstitutionalViolation: If raise_on_hc_violation=True and any
                      hard constraint is violated (ignored in dry_run mode).
         """
+        # Resolve strict_mode: call-site param overrides instance default
+        effective_strict = strict_mode if strict_mode is not None else self._strict_mode
+
+        # 0. Strict mode: empty context immediately returns THROTTLE
+        if effective_strict and not context:
+            summary = (
+                "THROTTLE — strict mode: empty context triggers HOLD — "
+                "report metrics or disable strict_mode."
+            )
+            result = ConstitutionResult(
+                system_state=SystemState.THROTTLE,
+                gate_results=[],
+                hard_constraint_violations=[],
+                blocking_gate=None,
+                blocking_gates=[],
+                hold_gates=[],
+                targets_met=False,
+                summary=summary,
+            )
+            if not dry_run:
+                self._record_evaluation(context, result)
+            return result
+
+        # 0b. Input validation — warn on out-of-range metric values
+        self._validate_metrics(context)
+
         # 1. Check hard constraints first — they are absolute
         hc_results = check_hard_constraints(context, self._hard_constraints)
         violated_hcs = [r for r in hc_results if r.violated]
@@ -272,6 +339,7 @@ class Constitution:
                 gate_results=[],
                 hard_constraint_violations=hc_violations,
                 blocking_gate=None,
+                blocking_gates=[],
                 hold_gates=[],
                 targets_met=False,
                 summary=(
@@ -291,16 +359,18 @@ class Constitution:
         blocking = next(
             (r for r in gate_results if r.state == GateState.FAIL), None
         )
+        all_blocking = [r for r in gate_results if r.state == GateState.FAIL]
         holds = [r for r in gate_results if r.state == GateState.HOLD]
 
         # 5. Build human-readable summary
-        summary = self._build_summary(system_state, blocking, holds)
+        summary = self._build_summary(system_state, blocking, holds, all_blocking)
 
         result = ConstitutionResult(
             system_state=system_state,
             gate_results=gate_results,
             hard_constraint_violations=hc_violations,
             blocking_gate=blocking,
+            blocking_gates=all_blocking,
             hold_gates=holds,
             targets_met=targets_met,
             summary=summary,
@@ -315,6 +385,7 @@ class Constitution:
         rationale: str,
         affected_sections: list[str],
         proposed_by: str = "agent",
+        changes: Optional[dict[str, Any]] = None,
     ) -> str:
         """
         Propose a constitutional amendment.
@@ -328,6 +399,10 @@ class Constitution:
             rationale:        Why the change is needed (with evidence).
             affected_sections: Which sections or gates are affected.
             proposed_by:      Identifier of the proposing agent/instance.
+            changes:          Optional dict of config changes to apply on
+                              ratification. Merged into the "gates" section.
+                              Example: {"gates": {"economic": {"pre_revenue":
+                                         {"runway_hold_months": 9.0}}}}
 
         Returns:
             Amendment ID (e.g., "AMEND-3A7F9B2C"). Present this to the
@@ -338,6 +413,7 @@ class Constitution:
             rationale=rationale,
             affected_sections=affected_sections,
             proposed_by=proposed_by,
+            changes=changes,
         )
         self._amendments.append(amendment)
         return amendment.id
@@ -369,6 +445,12 @@ class Constitution:
                 amendment.status = "RATIFIED"
                 amendment.ratified_at = datetime.now(timezone.utc).isoformat()
                 amendment.ratified_by = ratified_by
+                # Apply config changes and rebuild the evaluator if changes provided
+                if amendment.changes:
+                    self._deep_merge(self._config, amendment.changes)
+                    self._evaluator = self._build_evaluator(self._config)
+                if self._on_amendment_ratified is not None:
+                    self._on_amendment_ratified(amendment.to_dict())
                 return True
         return False
 
@@ -423,8 +505,15 @@ class Constitution:
         Applies YAML-configured threshold overrides per gate. Missing keys
         fall back to production-validated defaults. All threshold overrides
         are additive — you only need to specify values you want to change.
+
+        Gates with ``enabled: false`` in the YAML are replaced with a
+        _DisabledGate stub that always returns PASS, so they never block
+        the system state machine.
         """
         g = config.get("gates", {})
+
+        def _enabled(section: str) -> bool:
+            return bool(g.get(section, {}).get("enabled", True))
 
         def _f(section: str, key: str, default: float) -> float:
             return float(g.get(section, {}).get(key, default))
@@ -442,25 +531,42 @@ class Constitution:
         def _post(key: str, default: float) -> float:
             return float(post.get(key, default))
 
-        return SixGateEvaluator(
-            epistemic=EpistemicGate(
+        epistemic: Any = (
+            _DisabledGate("EpistemicGate")
+            if not _enabled("epistemic")
+            else EpistemicGate(
                 verification_fail=_f("epistemic", "fail_threshold", 0.50),
                 verification_hold=_f("epistemic", "hold_threshold", 0.70),
                 disagreement_fail=_f("epistemic", "disagreement_fail", 0.55),
                 disagreement_hold=_f("epistemic", "disagreement_hold", 0.35),
-            ),
-            risk=RiskGate(
+            )
+        )
+
+        risk: Any = (
+            _DisabledGate("RiskGate")
+            if not _enabled("risk")
+            else RiskGate(
                 misuse_fail=_f("risk", "misuse_fail", 0.80),
                 misuse_hold=_f("risk", "misuse_hold", 0.65),
                 channel_fail=_f("risk", "channel_fail", 0.50),
                 channel_hold=_f("risk", "channel_hold", 0.70),
-            ),
-            governance=GovernanceGate(
+            )
+        )
+
+        governance: Any = (
+            _DisabledGate("GovernanceGate")
+            if not _enabled("governance")
+            else GovernanceGate(
                 audit_fail=_f("governance", "audit_fail_threshold", 0.95),
                 test_pass_hold=_f("governance", "test_hold", 0.90),
                 test_pass_fail=_f("governance", "test_fail", 0.70),
-            ),
-            economic=EconomicGate(
+            )
+        )
+
+        economic: Any = (
+            _DisabledGate("EconomicGate")
+            if not _enabled("economic")
+            else EconomicGate(
                 runway_fail=_pre("runway_fail_months", 3.0),
                 runway_hold=_pre("runway_hold_months", 6.0),
                 dli_fail=_pre("dli_completion_fail", 0.01),
@@ -477,16 +583,26 @@ class Constitution:
                 churn_hold=_post("churn_hold", 0.08),
                 ltv_cac_fail=_post("ltv_cac_fail", 2.0),
                 ltv_cac_hold=_post("ltv_cac_hold", 3.0),
-            ),
-            autonomy=AutonomyGate(
+            )
+        )
+
+        autonomy: Any = (
+            _DisabledGate("AutonomyGate")
+            if not _enabled("autonomy")
+            else AutonomyGate(
                 human_minutes_fail=_f("autonomy", "human_minutes_fail", 120.0),
                 human_minutes_hold=_f("autonomy", "human_minutes_hold", 60.0),
                 decisions_fail=_i("autonomy", "decisions_fail", 10),
                 decisions_hold=_i("autonomy", "decisions_hold", 50),
                 activation_fail=_f("autonomy", "activation_fail", 0.25),
                 activation_hold=_f("autonomy", "activation_hold", 0.50),
-            ),
-            constitutional=ConstitutionalGate(
+            )
+        )
+
+        constitutional: Any = (
+            _DisabledGate("ConstitutionalGate")
+            if not _enabled("constitutional")
+            else ConstitutionalGate(
                 lessons_hold=_i("constitutional", "lessons_hold", 1),
                 bug_recurrence_fail=_f("constitutional", "bug_recurrence_fail", 0.30),
                 bug_recurrence_hold=_f("constitutional", "bug_recurrence_hold", 0.15),
@@ -495,7 +611,16 @@ class Constitution:
                 knowledge_hold=_f("constitutional", "freshness_hold", 0.50),
                 enforcement_fail=_f("constitutional", "enforcement_fail", 0.50),
                 enforcement_hold=_f("constitutional", "enforcement_hold", 0.70),
-            ),
+            )
+        )
+
+        return SixGateEvaluator(
+            epistemic=epistemic,
+            risk=risk,
+            governance=governance,
+            economic=economic,
+            autonomy=autonomy,
+            constitutional=constitutional,
         )
 
     @staticmethod
@@ -503,6 +628,7 @@ class Constitution:
         system_state: SystemState,
         blocking: Optional[GateResult],
         holds: list[GateResult],
+        all_blocking: Optional[list[GateResult]] = None,
     ) -> str:
         if system_state == SystemState.COMPOUND:
             return "COMPOUND — All gates PASS, all stretch targets met. Maximum growth mode."
@@ -512,15 +638,21 @@ class Constitution:
             gate_names = ", ".join(r.gate for r in holds)
             return f"THROTTLE — {len(holds)} gate(s) on HOLD: {gate_names}. Conserve resources."
         if system_state == SystemState.FREEZE:
+            if all_blocking and len(all_blocking) > 1:
+                gate_names = ", ".join(r.gate for r in all_blocking)
+                return (
+                    f"FREEZE — {len(all_blocking)} gates FAIL: {gate_names}. "
+                    "Stop discretionary spend."
+                )
             if blocking:
                 return f"FREEZE — {blocking.gate} FAIL: {blocking.reason}"
             return "FREEZE — Gate failure detected. Stop discretionary spend."
         return f"{system_state.value} — Evaluate manually."
 
     def _record_evaluation(
-        self, context: dict[str, Any], result: ConstitutionResult
+        self, context: dict[str, Any], result: "ConstitutionResult"
     ) -> None:
-        """Record evaluation for audit history."""
+        """Record evaluation for audit history and call persistence hook if set."""
         # Hash the context for deduplication without storing sensitive values
         ctx_hash = hashlib.sha256(
             json.dumps(context, sort_keys=True, default=str).encode()
@@ -534,3 +666,130 @@ class Constitution:
             "blocking_gate": result.blocking_gate.gate if result.blocking_gate else None,
             "hold_count": len(result.hold_gates),
         })
+
+        if self._on_evaluate is not None:
+            self._on_evaluate(result)
+
+    @staticmethod
+    def _parse_yaml_hard_constraints(hc_list: list[Any]) -> list[HardConstraint]:
+        """
+        Parse YAML-defined hard constraints into HardConstraint objects.
+
+        Supports check_op values: eq, ne, lt, lte, gt, gte.
+        The check function returns True when the constraint is VIOLATED.
+
+        Args:
+            hc_list: List of dicts from the "hard_constraints" YAML section.
+
+        Returns:
+            List of HardConstraint instances to append to builtins.
+        """
+        result: list[HardConstraint] = []
+        for entry in hc_list:
+            hc_id = entry.get("id", "HC-YAML-UNKNOWN")
+            description = entry.get("description", "")
+            check_key = entry.get("check_key", "")
+            check_op = entry.get("check_op", "eq")
+            check_value = entry.get("check_value")
+            remedy = entry.get("remedy", "Review and resolve the constraint violation.")
+
+            # Build the violation predicate based on the operator.
+            # Violated = True means the constraint is broken.
+            def _make_check(
+                k: str, op: str, v: Any
+            ) -> Callable[[dict[str, Any]], bool]:
+                def _check(ctx: dict[str, Any]) -> bool:
+                    if k not in ctx:
+                        return False  # Key absent → constraint not applicable
+                    actual = ctx[k]
+                    if op == "eq":
+                        return actual != v
+                    if op == "ne":
+                        return actual == v
+                    if op == "lt":
+                        return float(actual) >= float(v)
+                    if op == "lte":
+                        return float(actual) > float(v)
+                    if op == "gt":
+                        return float(actual) <= float(v)
+                    if op == "gte":
+                        return float(actual) < float(v)
+                    # Unknown op: fail-CLOSED
+                    return True
+                return _check
+
+            result.append(
+                HardConstraint(
+                    id=hc_id,
+                    description=description,
+                    check=_make_check(check_key, check_op, check_value),
+                    remedy=remedy,
+                )
+            )
+        return result
+
+    @staticmethod
+    def _validate_metrics(context: dict[str, Any]) -> None:
+        """
+        Warn about out-of-range metric values before evaluation.
+
+        Known 0-1 bounded metrics are checked for [0.0, 1.0] range.
+        Known positive metrics are checked for non-negative values.
+        Issues a UserWarning — does not raise.
+        """
+        bounded_01 = {
+            "verification_pass_rate",
+            "uncertainty_disclosure_rate",
+            "misuse_risk_index",
+            "channel_health",
+            "audit_coverage",
+            "test_pass_rate",
+            "agent_activation_rate",
+            "gross_margin",
+            "churn_rate",
+            "user_return_rate",
+        }
+        positive_metrics = {
+            "runway_months",
+            "decisions_per_day",
+            "human_minutes_per_day",
+        }
+
+        for key, val in context.items():
+            if key in bounded_01:
+                try:
+                    fval = float(val)
+                except (TypeError, ValueError):
+                    continue
+                if fval < 0.0 or fval > 1.0:
+                    warnings.warn(
+                        f"Metric '{key}' value {val} is outside expected [0.0, 1.0] range. "
+                        "Constitutional evaluation may be unreliable.",
+                        UserWarning,
+                        stacklevel=4,
+                    )
+            elif key in positive_metrics:
+                try:
+                    fval = float(val)
+                except (TypeError, ValueError):
+                    continue
+                if fval < 0.0:
+                    warnings.warn(
+                        f"Metric '{key}' value {val} is negative, which is not expected. "
+                        "Constitutional evaluation may be unreliable.",
+                        UserWarning,
+                        stacklevel=4,
+                    )
+
+    @staticmethod
+    def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> None:
+        """
+        Deep-merge `override` into `base` in-place.
+
+        Nested dicts are merged recursively. Scalar values are overwritten.
+        """
+        for key, val in override.items():
+            if key in base and isinstance(base[key], dict) and isinstance(val, dict):
+                Constitution._deep_merge(base[key], val)
+            else:
+                base[key] = val

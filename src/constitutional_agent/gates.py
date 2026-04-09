@@ -1324,19 +1324,19 @@ class SixGateEvaluator:
 
     def __init__(
         self,
-        epistemic: Optional[EpistemicGate] = None,
-        risk: Optional[RiskGate] = None,
-        governance: Optional[GovernanceGate] = None,
-        economic: Optional[EconomicGate] = None,
-        autonomy: Optional[AutonomyGate] = None,
-        constitutional: Optional[ConstitutionalGate] = None,
+        epistemic: Any = None,
+        risk: Any = None,
+        governance: Any = None,
+        economic: Any = None,
+        autonomy: Any = None,
+        constitutional: Any = None,
     ) -> None:
-        self.epistemic = epistemic or EpistemicGate()
-        self.risk = risk or RiskGate()
-        self.governance = governance or GovernanceGate()
-        self.economic = economic or EconomicGate()
-        self.autonomy = autonomy or AutonomyGate()
-        self.constitutional = constitutional or ConstitutionalGate()
+        self.epistemic = epistemic if epistemic is not None else EpistemicGate()
+        self.risk = risk if risk is not None else RiskGate()
+        self.governance = governance if governance is not None else GovernanceGate()
+        self.economic = economic if economic is not None else EconomicGate()
+        self.autonomy = autonomy if autonomy is not None else AutonomyGate()
+        self.constitutional = constitutional if constitutional is not None else ConstitutionalGate()
 
     def evaluate(
         self,

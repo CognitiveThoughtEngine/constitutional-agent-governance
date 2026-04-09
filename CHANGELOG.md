@@ -7,6 +7,68 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.3.0] - 2026-04-09
+
+### Fixed (critical-review issues)
+
+- **Issue 1 (HIGH) — YAML hard constraints silently ignored.** `Constitution.__init__`
+  now parses `config.get("hard_constraints", [])` and appends them to the builtin
+  HC list. Supports operators `eq`, `ne`, `lt`, `lte`, `gt`, `gte`. Builtins are
+  never replaced — only extended. Added `_parse_yaml_hard_constraints` static method.
+
+- **Issue 2 (HIGH) — Amendment ratification had no actual effect.** `AmendmentProposal`
+  now accepts an optional `changes: dict` parameter. `propose_amendment()` passes it
+  through. `ratify_amendment()` deep-merges `changes` into `self._config` and rebuilds
+  the evaluator immediately via `_build_evaluator`. Amendments now take effect the
+  moment they are ratified.
+
+- **Issue 3 (MEDIUM) — `enabled: false` gate config ignored.** `_build_evaluator` now
+  reads `g.get(section, {}).get("enabled", True)` for each gate. Disabled gates are
+  replaced with a `_DisabledGate` stub that always returns `GateResult(PASS, "Disabled
+  via governance.yaml")`. Added `_DisabledGate` private class in `constitution.py`.
+  `SixGateEvaluator.__init__` updated to accept `Any` typed gate slots.
+
+- **Issue 4 (DESIGN) — Missing metrics default to PASS.** Added `strict_mode: bool =
+  False` to `Constitution.__init__()` and an optional `strict_mode` parameter to
+  `evaluate()`. When `strict_mode` is active and `context` is empty, `evaluate()`
+  immediately returns `THROTTLE` with an explanatory summary. Call-site parameter
+  overrides instance-level setting.
+
+- **Issue 6 (MEDIUM) — No persistence layer.** Added `on_evaluate: Optional[Callable]`
+  and `on_amendment_ratified: Optional[Callable]` parameters to `Constitution.__init__`.
+  `_record_evaluation()` calls `on_evaluate(result)` if set. `ratify_amendment()` calls
+  `on_amendment_ratified(amendment.to_dict())` if set.
+
+- **Issue 7 (LOW) — Pydantic required but never used.** Removed `pydantic>=2.6,<3`
+  from `[project] dependencies` in `pyproject.toml`. The library uses only stdlib
+  dataclasses and PyYAML.
+
+- **Issue 8 (LOW-MEDIUM) — No input validation on metrics.** Added `_validate_metrics`
+  static method called at the start of `evaluate()`. Issues `UserWarning` for any
+  known 0-1 bounded metric outside `[0.0, 1.0]` and any known positive metric below
+  zero. Does not raise — warns only.
+
+- **Issue 9 (version mismatch).** `__init__.py` updated from `0.1.0` to `0.3.0`.
+  `pyproject.toml` updated from `0.2.0` to `0.3.0`.
+
+- **Issue 10 — Multiple gate violations: only first reported.** Added
+  `blocking_gates: list[GateResult]` field to `ConstitutionResult` (default empty
+  list). Populated with all FAIL gates in `evaluate()`. `_build_summary` now
+  mentions all failing gate names when multiple gates FAIL simultaneously.
+  `blocking_gate` (singular) retained for backwards compatibility.
+
+### Added
+
+- `_DisabledGate` — private stub gate in `constitution.py` that always returns PASS.
+  Used when a gate has `enabled: false` in governance.yaml.
+- `_parse_yaml_hard_constraints(hc_list)` — static method on `Constitution`.
+- `_validate_metrics(context)` — static method on `Constitution`.
+- `_deep_merge(base, override)` — static method on `Constitution`.
+- `AmendmentProposal.changes` attribute and `to_dict()` includes `"changes"` key.
+- 26 new tests covering all fixed issues (103 total, 0 failed).
+
+---
+
 ## [0.2.0] — 2026-04-08
 
 ### Added
