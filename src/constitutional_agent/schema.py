@@ -104,10 +104,10 @@ class ConstitutionResult:
     """
 
     system_state: SystemState
-    gate_results: list[GateResult]
-    hard_constraint_violations: list[HardConstraintViolation]
-    blocking_gate: Optional[GateResult]
-    hold_gates: list[GateResult]
-    targets_met: bool
-    summary: str
+    gate_results: list[GateResult] = field(default_factory=list)
+    hard_constraint_violations: list[HardConstraintViolation] = field(default_factory=list)
+    blocking_gate: Optional[GateResult] = None
     blocking_gates: list[GateResult] = field(default_factory=list)
+    hold_gates: list[GateResult] = field(default_factory=list)
+    targets_met: bool = False
+    summary: str = ''

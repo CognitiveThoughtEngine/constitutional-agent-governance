@@ -27,6 +27,7 @@ Usage:
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import uuid
@@ -142,6 +143,17 @@ class AmendmentProposal:
             "changes": self.changes,
         }
 
+
+# Known metric keys read by built-in gates (used by strict_mode).
+_KNOWN_GATE_METRICS: frozenset[str] = frozenset({
+    "uncertainty_disclosure_rate", "verification_pass_rate",
+    "misuse_risk_index",
+    "gaming_incidents_7d", "lessons_learned_weekly",
+    "runway_months", "gross_margin", "burn_coverage",
+    "agent_activation_rate", "decisions_per_day", "human_minutes_per_day",
+    "sign_resolution_rate", "circuit_open_minutes_per_day",
+    "failing_tests", "hours_since_last_execution",
+})
 
 class Constitution:
     """
@@ -292,7 +304,7 @@ class Constitution:
         effective_strict = strict_mode if strict_mode is not None else self._strict_mode
 
         # 0. Strict mode: empty context immediately returns THROTTLE
-        if effective_strict and not context:
+        if effective_strict and not (set(context) & _KNOWN_GATE_METRICS):
             summary = (
                 "THROTTLE — strict mode: empty context triggers HOLD — "
                 "report metrics or disable strict_mode."
@@ -447,8 +459,13 @@ class Constitution:
                 amendment.ratified_by = ratified_by
                 # Apply config changes and rebuild the evaluator if changes provided
                 if amendment.changes:
-                    self._deep_merge(self._config, amendment.changes)
-                    self._evaluator = self._build_evaluator(self._config)
+                    config_backup = copy.deepcopy(self._config)
+                    try:
+                        self._deep_merge(self._config, amendment.changes)
+                        self._evaluator = self._build_evaluator(self._config)
+                    except Exception:
+                        self._config = config_backup
+                        raise
                 if self._on_amendment_ratified is not None:
                     self._on_amendment_ratified(amendment.to_dict())
                 return True
@@ -691,21 +708,22 @@ class Constitution:
             check_key = entry.get("check_key", "")
             check_op = entry.get("check_op", "eq")
             check_value = entry.get("check_value")
+            check_required = bool(entry.get("required", False))
             remedy = entry.get("remedy", "Review and resolve the constraint violation.")
 
             # Build the violation predicate based on the operator.
             # Violated = True means the constraint is broken.
             def _make_check(
-                k: str, op: str, v: Any
+                k: str, op: str, v: Any, req: bool
             ) -> Callable[[dict[str, Any]], bool]:
                 def _check(ctx: dict[str, Any]) -> bool:
                     if k not in ctx:
-                        return False  # Key absent → constraint not applicable
+                        return req  # Key absent → constraint not applicable
                     actual = ctx[k]
                     if op == "eq":
-                        return actual != v
+                        return bool(actual != v)
                     if op == "ne":
-                        return actual == v
+                        return bool(actual == v)
                     if op == "lt":
                         return float(actual) >= float(v)
                     if op == "lte":
@@ -722,7 +740,7 @@ class Constitution:
                 HardConstraint(
                     id=hc_id,
                     description=description,
-                    check=_make_check(check_key, check_op, check_value),
+                    check=_make_check(check_key, check_op, check_value, check_required),
                     remedy=remedy,
                 )
             )
