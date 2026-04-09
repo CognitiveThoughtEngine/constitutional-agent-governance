@@ -145,6 +145,8 @@ class AmendmentProposal:
 
 
 # Known metric keys read by built-in gates (used by strict_mode).
+# SYNC REQUIRED: when adding a new metric to any gate class in gates.py,
+# add its context key here. Test: test_known_gate_metrics_coverage in test_gates.py.
 _KNOWN_GATE_METRICS: frozenset[str] = frozenset({
     "uncertainty_disclosure_rate", "verification_pass_rate",
     "misuse_risk_index",
@@ -454,10 +456,8 @@ class Constitution:
         """
         for amendment in self._amendments:
             if amendment.id == amendment_id and amendment.status == "PENDING":
-                amendment.status = "RATIFIED"
-                amendment.ratified_at = datetime.now(timezone.utc).isoformat()
-                amendment.ratified_by = ratified_by
-                # Apply config changes and rebuild the evaluator if changes provided
+                # Apply config changes before marking ratified so status stays
+                # consistent with evaluator state on error.
                 if amendment.changes:
                     config_backup = copy.deepcopy(self._config)
                     try:
@@ -466,6 +466,10 @@ class Constitution:
                     except Exception:
                         self._config = config_backup
                         raise
+                # Mark ratified only after config changes succeed
+                amendment.status = "RATIFIED"
+                amendment.ratified_at = datetime.now(timezone.utc).isoformat()
+                amendment.ratified_by = ratified_by
                 if self._on_amendment_ratified is not None:
                     self._on_amendment_ratified(amendment.to_dict())
                 return True

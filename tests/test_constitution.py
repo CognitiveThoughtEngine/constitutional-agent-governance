@@ -1,6 +1,7 @@
 """
 Tests for Constitution — YAML loading, dry_run, amendment protocol.
 """
+import copy
 import tempfile
 
 import pytest
@@ -716,20 +717,47 @@ def test_strict_mode_one_known_metric_proceeds_normally():
 # Issue 4: _deep_merge rollback on error
 # ---------------------------------------------------------------------------
 
-def test_ratify_amendment_rolls_back_config_on_error():
-    """If _build_evaluator raises after _deep_merge, config is rolled back."""
+def test_ratify_amendment_rolls_back_config_on_error(monkeypatch):
+    """If _build_evaluator raises, config AND amendment.status are rolled back."""
     c = Constitution.from_defaults()
-    original_config = str(c._config)  # snapshot for comparison
+    original_config = copy.deepcopy(c._config)
 
-    # Propose an amendment with changes that will cause _build_evaluator to
-    # succeed (we can't easily cause it to error, so test the backup path
-    # by verifying the config IS updated when there is no error).
     aid = c.propose_amendment(
-        description="Adjust runway hold",
+        description="Trigger rollback",
         rationale="Testing rollback mechanism",
-        affected_sections=["economic"],
-        changes={"gates": {"economic": {"runway_hold_months": 7.0}}},
+        affected_sections=["epistemic"],
+        changes={"gates": {"epistemic": {"fail_threshold": 0.1}}},
     )
-    c.ratify_amendment(aid, ratified_by="test")
-    # Config should be updated (not rolled back since no error occurred)
-    assert c._config != original_config or True  # merge succeeded, no error
+    # Monkeypatch _build_evaluator to raise after the config is merged
+    def boom(cfg):
+        raise ValueError("injected build error")
+    monkeypatch.setattr(c, "_build_evaluator", boom)
+
+    with pytest.raises(ValueError, match="injected build error"):
+        c.ratify_amendment(aid, ratified_by="CEO")
+
+    # Config must be restored to pre-merge state
+    assert c._config == original_config, "config not rolled back after build error"
+    # Amendment must NOT be marked RATIFIED (status stays PENDING)
+    log = c.amendment_log
+    assert log[-1]["status"] == "PENDING", (
+        f"amendment.status must stay PENDING on error, got {log[-1]['status']}"
+    )
+
+
+def test_ratify_amendment_status_not_set_before_config_merge():
+    """amendment.status is set AFTER config changes succeed, not before."""
+    calls = []
+    def on_ratified(amendment_dict):
+        calls.append(amendment_dict["status"])
+
+    c = Constitution(config={}, on_amendment_ratified=on_ratified)
+    aid = c.propose_amendment(
+        description="Simple amendment",
+        rationale="Status ordering test",
+        affected_sections=["governance"],
+        changes={"gates": {"governance": {"gaming_fail": 5}}},
+    )
+    c.ratify_amendment(aid, ratified_by="CEO")
+    # Callback fires AFTER status is set
+    assert calls == ["RATIFIED"]

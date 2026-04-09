@@ -482,3 +482,128 @@ def test_agenthustler_dead_channel_caught_by_risk():
     """RiskGate: 0% channel health catches posting to shadow-banned HN account."""
     result = RiskGate().evaluate({"channel_health": 0.0})
     assert result.state == GateState.FAIL
+
+
+# ---------------------------------------------------------------------------
+# Coverage: RiskGate uncovered branches (lines 293, 329, 340)
+# ---------------------------------------------------------------------------
+
+def test_riskgate_irreversibility_fail():
+    result = RiskGate().evaluate({"irreversibility_score": 0.85})
+    assert result.state == GateState.FAIL
+    assert "irreversibility" in result.reason.lower()
+
+def test_riskgate_misuse_hold():
+    result = RiskGate().evaluate({"misuse_risk_index": 0.70})
+    assert result.state == GateState.HOLD
+    assert "misuse" in result.reason.lower()
+
+def test_riskgate_irreversibility_hold():
+    result = RiskGate().evaluate({"irreversibility_score": 0.65})
+    assert result.state == GateState.HOLD
+    assert "irreversibility" in result.reason.lower()
+
+def test_governancegate_test_pass_fail():
+    result = GovernanceGate().evaluate({"test_pass_rate": 0.60})
+    assert result.state == GateState.FAIL
+    assert "test" in result.reason.lower()
+
+def test_governancegate_test_pass_hold():
+    result = GovernanceGate().evaluate({"test_pass_rate": 0.80})
+    assert result.state == GateState.HOLD
+    assert "test" in result.reason.lower()
+
+def test_economicgate_pre_revenue_dli_fail():
+    result = EconomicGate().evaluate({"pre_revenue": True, "runway_months": 8.0, "dli_completion_rate": 0.0, "value_demo_count": 1})
+    assert result.state == GateState.FAIL
+
+def test_economicgate_pre_revenue_return_rate_fail():
+    result = EconomicGate().evaluate({"pre_revenue": True, "runway_months": 8.0, "dli_completion_rate": 0.05, "user_return_rate": 0.02, "value_demo_count": 1})
+    assert result.state == GateState.FAIL
+    assert "return" in result.reason.lower()
+
+def test_economicgate_pre_revenue_return_rate_hold():
+    result = EconomicGate().evaluate({"pre_revenue": True, "runway_months": 8.0, "dli_completion_rate": 0.06, "user_return_rate": 0.08, "value_demo_count": 3})
+    assert result.state == GateState.HOLD
+
+def test_economicgate_cac_fail():
+    result = EconomicGate().evaluate({"stage": "post_revenue", "runway_months": 8.0, "gross_margin": 0.6, "cac": 400.0})
+    assert result.state == GateState.FAIL
+
+def test_economicgate_churn_fail():
+    result = EconomicGate().evaluate({"stage": "post_revenue", "runway_months": 8.0, "gross_margin": 0.6, "churn_rate": 0.20})
+    assert result.state == GateState.FAIL
+    assert "churn" in result.reason.lower()
+
+def test_economicgate_ltv_cac_fail():
+    result = EconomicGate().evaluate({"stage": "post_revenue", "runway_months": 8.0, "gross_margin": 0.6, "ltv_cac_ratio": 1.5})
+    assert result.state == GateState.FAIL
+
+def test_economicgate_ltv_cac_hold():
+    result = EconomicGate().evaluate({"stage": "post_revenue", "runway_months": 8.0, "gross_margin": 0.6, "ltv_cac_ratio": 2.5})
+    assert result.state == GateState.HOLD
+
+def test_autonomygate_escalations_fail():
+    result = AutonomyGate().evaluate({"escalations_per_day": 15, "decisions_per_day": 100})
+    assert result.state == GateState.FAIL
+
+def test_autonomygate_auto_recovery_fail():
+    result = AutonomyGate().evaluate({"auto_recovery_rate": 0.40, "decisions_per_day": 100})
+    assert result.state == GateState.FAIL
+    assert "recovery" in result.reason.lower()
+
+def test_autonomygate_decisions_hold():
+    result = AutonomyGate().evaluate({"decisions_per_day": 30})
+    assert result.state == GateState.HOLD
+
+def test_autonomygate_activation_hold():
+    result = AutonomyGate().evaluate({"agent_activation_rate": 0.40, "decisions_per_day": 100})
+    assert result.state == GateState.HOLD
+
+def test_autonomygate_escalations_hold():
+    result = AutonomyGate().evaluate({"escalations_per_day": 7, "decisions_per_day": 100})
+    assert result.state == GateState.HOLD
+
+def test_autonomygate_recovery_hold():
+    result = AutonomyGate().evaluate({"auto_recovery_rate": 0.60, "decisions_per_day": 100})
+    assert result.state == GateState.HOLD
+
+def test_constitutionalgate_bug_recurrence_fail():
+    result = ConstitutionalGate().evaluate({"lessons_learned_weekly": 2, "amendments_per_month": 1, "bug_recurrence_rate": 0.35})
+    assert result.state == GateState.FAIL
+
+def test_constitutionalgate_zero_amendments_fail():
+    result = ConstitutionalGate().evaluate({"lessons_learned_weekly": 2, "amendments_per_month": 0})
+    assert result.state == GateState.FAIL
+
+def test_constitutionalgate_knowledge_fail():
+    result = ConstitutionalGate().evaluate({"lessons_learned_weekly": 2, "amendments_per_month": 1, "knowledge_freshness": 0.20})
+    assert result.state == GateState.FAIL
+
+def test_constitutionalgate_enforcement_fail():
+    result = ConstitutionalGate().evaluate({"lessons_learned_weekly": 2, "amendments_per_month": 1, "enforcement_coverage": 0.40})
+    assert result.state == GateState.FAIL
+
+def test_constitutionalgate_bug_recurrence_hold():
+    result = ConstitutionalGate().evaluate({"lessons_learned_weekly": 2, "amendments_per_month": 1, "bug_recurrence_rate": 0.20})
+    assert result.state == GateState.HOLD
+
+def test_constitutionalgate_knowledge_hold():
+    result = ConstitutionalGate().evaluate({"lessons_learned_weekly": 2, "amendments_per_month": 1, "knowledge_freshness": 0.40})
+    assert result.state == GateState.HOLD
+
+def test_constitutionalgate_enforcement_hold():
+    result = ConstitutionalGate().evaluate({"lessons_learned_weekly": 2, "amendments_per_month": 1, "enforcement_coverage": 0.60})
+    assert result.state == GateState.HOLD
+
+def test_known_gate_metrics_contains_gate_keys():
+    from constitutional_agent.constitution import _KNOWN_GATE_METRICS
+    expected = {
+        "uncertainty_disclosure_rate", "verification_pass_rate",
+        "misuse_risk_index", "lessons_learned_weekly",
+        "runway_months", "gross_margin",
+        "agent_activation_rate", "decisions_per_day",
+        "sign_resolution_rate", "failing_tests", "hours_since_last_execution",
+    }
+    missing = expected - _KNOWN_GATE_METRICS
+    assert not missing, f"Missing from _KNOWN_GATE_METRICS: {missing}"
