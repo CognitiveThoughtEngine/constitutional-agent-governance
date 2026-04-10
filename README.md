@@ -8,8 +8,7 @@
 **The governance layer your AI agent is missing.**
 
 ```bash
-pip install constitutional-agent          # stable (v0.3.2)
-pip install constitutional-agent --pre  # latest beta (v0.4.0b3)
+pip install constitutional-agent
 ```
 
 ---
@@ -266,8 +265,7 @@ if result.state == GateState.FAIL:
 ## Installation
 
 ```bash
-pip install constitutional-agent          # stable (v0.3.2)
-pip install constitutional-agent --pre  # latest beta (v0.4.0b3)
+pip install constitutional-agent
 ```
 
 **Requirements:** Python 3.11+, pydantic >= 2.6, pyyaml >= 6.0
