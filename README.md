@@ -1,14 +1,15 @@
 # constitutional-agent
 
 [![Tests](https://github.com/CognitiveThoughtEngine/constitutional-agent-governance/actions/workflows/tests.yml/badge.svg)](https://github.com/CognitiveThoughtEngine/constitutional-agent-governance/actions/workflows/tests.yml)
-[![PyPI](https://img.shields.io/pypi/v/constitutional-agent)](https://pypi.org/project/constitutional-agent/)
+[![PyPI](https://img.shields.io/pypi/v/constitutional-agent?include_prereleases=true)](https://pypi.org/project/constitutional-agent/#history)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 **The governance layer your AI agent is missing.**
 
 ```bash
-pip install constitutional-agent
+pip install constitutional-agent          # stable (v0.3.2)
+pip install constitutional-agent --pre  # latest beta (v0.4.0b3)
 ```
 
 ---
@@ -86,6 +87,30 @@ else:
 ```
 
 ---
+
+## EU AI Act Article 27 — FRIA Output (v0.4.0 beta)
+
+`constitution.fria_evidence(context)` maps all six gates to the six FRIA categories required by EU AI Act Article 27. Deployments subject to the Act must complete a Fundamental Rights Impact Assessment before going live; this method generates structured evidence directly from live evaluation data.
+
+```python
+from constitutional_agent.fria import fria_summary, fria_narrative
+
+evidence = constitution.fria_evidence(context)  # list[FRIAEvidence]
+summary  = fria_summary(evidence)               # {overall_status, covered, flagged, gaps}
+report   = fria_narrative(evidence)             # human-readable markdown
+
+# Six categories automatically populated:
+# Safety & robustness      -> RiskGate + HC-1/7
+# Non-discrimination       -> EpistemicGate
+# Human oversight          -> AutonomyGate + HC-12
+# Privacy & data governance -> RiskGate
+# Transparency             -> GovernanceGate + HC-4/15
+# Accountability           -> GovernanceGate + HC-11/12
+
+if summary["overall_status"] != "compliant":
+    gaps = [k for k, v in summary["categories"].items() if v["status"] != "covered"]
+    print("FRIA gaps:", gaps)
+```
 
 ## Core Concepts
 
@@ -241,7 +266,8 @@ if result.state == GateState.FAIL:
 ## Installation
 
 ```bash
-pip install constitutional-agent
+pip install constitutional-agent          # stable (v0.3.2)
+pip install constitutional-agent --pre  # latest beta (v0.4.0b3)
 ```
 
 **Requirements:** Python 3.11+, pydantic >= 2.6, pyyaml >= 6.0
