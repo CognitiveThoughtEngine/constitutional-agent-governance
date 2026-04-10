@@ -566,7 +566,6 @@ class Constitution:
         Section 0.7 HC-1/4/11/12/15 (hard-constraint evidence).
         """
         from datetime import datetime, timezone
-        from typing import Any
 
         # result is caller-supplied; if None, all categories report GAP
 

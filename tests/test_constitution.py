@@ -854,7 +854,7 @@ def test_validate_metrics_warns_on_negative_positive_metric():
 
 
 # ---------------------------------------------------------------------------
-# fria_evidence() — EU AI Act Article 27 (issue #12)
+# fria_evidence() -- EU AI Act Article 27 (issue #12)
 # ---------------------------------------------------------------------------
 
 MINIMAL_YAML = """
