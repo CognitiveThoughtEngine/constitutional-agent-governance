@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from constitutional_agent.schema import GateResult, GateState
 from constitutional_agent.fria import (
-    FRIACategory, FRIAEvidence, generate_fria_evidence, fria_summary, fria_narrative,
+    FRIACategory, generate_fria_evidence, fria_summary, fria_narrative,
 )
 
 

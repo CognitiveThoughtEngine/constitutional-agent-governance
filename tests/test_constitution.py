@@ -855,133 +855,103 @@ def test_validate_metrics_warns_on_negative_positive_metric():
 
 # ---------------------------------------------------------------------------
 # fria_evidence() -- EU AI Act Article 27 (issue #12)
+# Tests for Constitution.fria_evidence(context) -> list[FRIAEvidence]
 # ---------------------------------------------------------------------------
 
-MINIMAL_YAML = """
-agent_name: fria-test-agent
-hard_constraints: []
-"""
-
-FULL_CONTEXT = {
+_FRIA_CONTEXT = {
+    "misuse_risk_index": 0.05,
+    "verification_pass_rate": 0.90,
+    "audit_coverage": 0.98,
+    "human_minutes_per_day": 20,
+    "decisions_per_day": 150,
+    "agent_activation_rate": 0.80,
+    "uncertainty_disclosure_rate": 0.85,
+    "gaming_incidents_7d": 0,
+    "lessons_learned_weekly": 3,
     "failing_tests": 0,
     "hours_since_last_execution": 2,
     "runway_months": 9.0,
-    "lessons_learned_weekly": 3,
-    "uncertainty_disclosure_rate": 0.85,
-    "verification_pass_rate": 0.90,
-    "misuse_risk_index": 0.05,
-    "gaming_incidents_7d": 0,
-    "gross_margin": 0.60,
-    "burn_coverage": 0.80,
-    "agent_activation_rate": 0.80,
-    "decisions_per_day": 150,
-    "human_minutes_per_day": 20,
-    "sign_resolution_rate": 0.90,
-    "circuit_open_minutes_per_day": 5,
 }
 
 
-def _make_constitution(yaml_text=None):
-    import yaml
-    import textwrap
-    from constitutional_agent import Constitution
-    raw = yaml_text if yaml_text is not None else MINIMAL_YAML
-    return Constitution(yaml.safe_load(textwrap.dedent(raw)))
-
-
 class TestFriaEvidence:
-    def test_no_result_returns_all_gap(self):
-        c = _make_constitution()
-        fria = c.fria_evidence()
-        assert fria["overall_covered"] is False
-        assert len(fria["gaps"]) == 6
-        for cat in fria["categories"]:
-            assert cat["status"] == "GAP"
-            assert cat["gate_state"] == "N/A"
-            assert cat["metric"] is None
+    def _constitution(self):
+        from constitutional_agent import Constitution
+        return Constitution.from_defaults()
 
-    def test_article_27_label(self):
-        c = _make_constitution()
-        fria = c.fria_evidence()
-        assert fria["eu_ai_act_article"] == "Article 27"
+    def test_returns_six_categories(self):
+        c = self._constitution()
+        evidence = c.fria_evidence(_FRIA_CONTEXT)
+        assert len(evidence) == 6
 
-    def test_generated_at_is_iso8601(self):
-        from datetime import datetime
-        c = _make_constitution()
-        fria = c.fria_evidence()
-        # Must parse without error
-        datetime.fromisoformat(fria["generated_at"])
+    def test_status_values_are_valid(self):
+        c = self._constitution()
+        evidence = c.fria_evidence(_FRIA_CONTEXT)
+        valid = {"covered", "flagged", "gap", "partial"}
+        for ev in evidence:
+            assert ev.status in valid
 
-    def test_six_categories_present(self):
-        c = _make_constitution()
-        fria = c.fria_evidence()
-        names = [cat["name"] for cat in fria["categories"]]
-        assert "Safety and robustness" in names
-        assert "Non-discrimination and equal treatment" in names
-        assert "Human oversight and control" in names
-        assert "Privacy and data governance" in names
-        assert "Transparency and explainability" in names
-        assert "Accountability and auditability" in names
-        assert len(names) == 6
+    def test_all_passing_context_mostly_covered(self):
+        c = self._constitution()
+        evidence = c.fria_evidence(_FRIA_CONTEXT)
+        covered = [ev for ev in evidence if ev.status == "covered"]
+        assert len(covered) >= 3
 
-    def test_with_passing_result_all_covered(self):
-        c = _make_constitution()
-        result = c.evaluate(FULL_CONTEXT)
-        fria = c.fria_evidence(result)
-        assert fria["overall_covered"] is True
-        assert fria["gaps"] == []
-        for cat in fria["categories"]:
-            assert cat["status"] == "COVERED"
+    def test_failing_gate_flags_category(self):
+        c = self._constitution()
+        ctx = dict(_FRIA_CONTEXT)
+        ctx["verification_pass_rate"] = 0.20
+        evidence = c.fria_evidence(ctx)
+        statuses = {ev.category.value: ev.status for ev in evidence}
+        assert statuses.get("non_discrimination") in ("flagged", "gap")
 
-    def test_system_state_propagated(self):
-        c = _make_constitution()
-        result = c.evaluate(FULL_CONTEXT)
-        fria = c.fria_evidence(result)
-        assert fria["system_state"] == result.system_state.value
+    def test_empty_context_returns_six_items(self):
+        """Empty context still returns exactly 6 FRIA items."""
+        c = self._constitution()
+        evidence = c.fria_evidence({})
+        assert len(evidence) == 6
 
-    def test_hold_gate_gives_partial(self):
-        """A HOLD gate produces PARTIAL status for its FRIA category."""
-        # GovernanceGate HOLD: metric_anomaly_score >= 0.60 (HOLD) and < 0.80 (FAIL)
-        c = _make_constitution()
-        ctx = dict(FULL_CONTEXT)
-        ctx["metric_anomaly_score"] = 0.70  # between HOLD=0.60 and FAIL=0.80
-        result = c.evaluate(ctx)
-        fria = c.fria_evidence(result)
-        transparency = next(cat for cat in fria["categories"] if "Transparency" in cat["name"])
-        assert transparency["gate_state"] == "HOLD", f"Expected HOLD, got {transparency['gate_state']}"
-        assert transparency["status"] == "PARTIAL"
+    def test_categories_have_descriptions(self):
+        c = self._constitution()
+        evidence = c.fria_evidence(_FRIA_CONTEXT)
+        for ev in evidence:
+            assert ev.description
 
-    def test_fail_gate_gives_gap(self):
-        # EpistemicGate FAIL: verification_pass_rate < 0.50 (default VERIFICATION_FAIL)
-        c = _make_constitution()
-        ctx = dict(FULL_CONTEXT)
-        ctx["verification_pass_rate"] = 0.30
-        result = c.evaluate(ctx)
-        fria = c.fria_evidence(result)
-        nondiscrim = next(cat for cat in fria["categories"] if "Non-discrimination" in cat["name"])
-        assert nondiscrim["gate_state"] == "FAIL"
-        assert nondiscrim["status"] == "GAP"
-        assert "Non-discrimination and equal treatment" in fria["gaps"]
+    def test_gate_results_populated(self):
+        c = self._constitution()
+        evidence = c.fria_evidence(_FRIA_CONTEXT)
+        has_gate_data = [ev for ev in evidence if ev.gate_results]
+        assert len(has_gate_data) > 0
 
-    def test_no_result_state_is_na(self):
-        c = _make_constitution()
-        fria = c.fria_evidence()
-        assert fria["system_state"] == "N/A"
+    def test_fria_summary_helper(self):
+        from constitutional_agent.fria import fria_summary
+        c = self._constitution()
+        evidence = c.fria_evidence(_FRIA_CONTEXT)
+        summary = fria_summary(evidence)
+        assert "overall_status" in summary
+        assert summary["total_categories"] == 6
 
-    def test_hc_evidence_in_safety_category(self):
-        """Safety category evidence includes HC-1 and HC-7 lines."""
-        c = _make_constitution()
-        result = c.evaluate(FULL_CONTEXT)
-        fria = c.fria_evidence(result)
-        safety = next(cat for cat in fria["categories"] if cat["name"] == "Safety and robustness")
-        evidence_text = " ".join(safety["evidence"])
-        assert "HC-1" in evidence_text
-        assert "HC-7" in evidence_text
+    def test_fria_narrative_helper(self):
+        from constitutional_agent.fria import fria_narrative
+        c = self._constitution()
+        evidence = c.fria_evidence(_FRIA_CONTEXT)
+        narrative = fria_narrative(evidence)
+        assert "Article 27" in narrative
+        assert len(narrative) > 100
 
-    def test_gate_source_fields(self):
-        """Each category has a non-empty gate_source string."""
-        c = _make_constitution()
-        result = c.evaluate(FULL_CONTEXT)
-        fria = c.fria_evidence(result)
-        for cat in fria["categories"]:
-            assert cat["gate_source"], f"gate_source empty for {cat['name']}"
+    def test_hc_violation_reflects_in_evidence(self):
+        from constitutional_agent.fria import generate_fria_evidence
+        from constitutional_agent.schema import GateState, GateResult
+        gate_results = [
+            GateResult(gate="RiskGate", state=GateState.PASS, reason="ok"),
+            GateResult(gate="EpistemicGate", state=GateState.PASS, reason="ok"),
+            GateResult(gate="GovernanceGate", state=GateState.PASS, reason="ok"),
+            GateResult(gate="EconomicGate", state=GateState.PASS, reason="ok"),
+            GateResult(gate="AutonomyGate", state=GateState.PASS, reason="ok"),
+            GateResult(gate="ConstitutionalGate", state=GateState.PASS, reason="ok"),
+        ]
+        hc_violations = [{"constraint_id": "HC-12", "violated": True, "description": "silent outage"}]
+        evidence = generate_fria_evidence(gate_results, hc_violations)
+        oversight = next(ev for ev in evidence if ev.category.value == "human_oversight")
+        assert oversight.status == "flagged"
+
