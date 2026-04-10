@@ -485,6 +485,33 @@ class Constitution:
         """Number of evaluate() calls made with this constitution."""
         return len(self._evaluation_history)
 
+    def fria_evidence(self, context: dict[str, Any]) -> list:
+        """Generate FRIA evidence from a governance evaluation.
+
+        Evaluates all gates and hard constraints against the provided
+        context, then maps results to EU AI Act Article 27 FRIA categories.
+
+        Args:
+            context: Dict of metric values (same as evaluate()).
+
+        Returns:
+            List of FRIAEvidence, one per FRIA category (always 6).
+        """
+        from constitutional_agent.fria import generate_fria_evidence
+
+        # Evaluate gates
+        targets_met = bool(context.get("targets_met", False))
+        _, gate_results = self._evaluator.evaluate(context, targets_met)
+
+        # Check hard constraints
+        hc_results = check_hard_constraints(context, self._hard_constraints)
+        hc_violations = [
+            {"constraint_id": r.id, "description": r.description, "violated": True}
+            for r in hc_results if r.violated
+        ]
+
+        return generate_fria_evidence(gate_results, hc_violations)
+
     def summary_report(self) -> dict[str, Any]:
         """
         Generate a summary report of constitutional health.
