@@ -485,7 +485,7 @@ class Constitution:
         """Number of evaluate() calls made with this constitution."""
         return len(self._evaluation_history)
 
-    def fria_evidence(self, context: dict[str, Any]) -> list:
+    def fria_evidence(self, context: dict[str, Any]) -> "list[Any]":
         """Generate FRIA evidence from a governance evaluation.
 
         Evaluates all gates and hard constraints against the provided

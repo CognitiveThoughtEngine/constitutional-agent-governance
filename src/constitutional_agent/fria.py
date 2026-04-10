@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 from constitutional_agent.schema import GateResult, GateState
 
@@ -38,8 +38,8 @@ class FRIAEvidence:
     """Evidence for a single FRIA category."""
     category: FRIACategory
     description: str
-    gate_results: list[dict] = field(default_factory=list)
-    hc_results: list[dict] = field(default_factory=list)
+    gate_results: list[dict[str, Any]] = field(default_factory=list)
+    hc_results: list[dict[str, Any]] = field(default_factory=list)
     status: str = "gap"  # "covered", "partial", "gap", "flagged"
     narrative: str = ""
     recommendations: list[str] = field(default_factory=list)
@@ -140,8 +140,9 @@ def generate_fria_evidence(
         has_gate_data = False
         gate_passing = True
         for gate_name in mapping["gates"]:
-            gr = gate_index.get(gate_name)
-            if gr:
+            gr_opt: Optional[GateResult] = gate_index.get(gate_name)
+            if gr_opt:
+                gr = gr_opt
                 has_gate_data = True
                 ev.gate_results.append({
                     "gate": gr.gate,
@@ -225,7 +226,7 @@ def fria_summary(evidence: list[FRIAEvidence]) -> dict[str, Any]:
     Returns:
         Dict with category-level summaries and overall status.
     """
-    categories: dict[str, dict] = {}
+    categories: dict[str, dict[str, Any]] = {}
     covered = 0
     flagged = 0
     gaps = 0
