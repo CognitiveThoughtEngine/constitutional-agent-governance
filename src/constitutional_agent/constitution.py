@@ -515,6 +515,197 @@ class Constitution:
             "hard_constraints_active": len(self._hard_constraints),
         }
 
+
+    def fria_evidence(
+        self,
+        result=None,
+    ):
+        """
+        Generate Fundamental Rights Impact Assessment (FRIA) evidence.
+
+        Maps constitutional gate results to the six categories required by
+        EU AI Act Article 27 for high-risk AI systems.  Deployments subject
+        to the Act MUST complete a FRIA before going live; this method
+        produces structured evidence from live evaluation data that can be
+        included directly in that assessment.
+
+        Args:
+            result: A ``ConstitutionResult`` from a prior ``evaluate()`` call.
+                    If ``None``, uses the most recent evaluation stored in
+                    ``None``.  If no evaluations have been run yet,
+                    all categories are returned with status ``"GAP"``.
+
+        Returns:
+            A plain ``dict`` with the following top-level keys:
+
+            * ``eu_ai_act_article`` -- always ``"Article 27"``
+            * ``generated_at`` -- ISO-8601 UTC timestamp
+            * ``system_state`` -- the system state at evaluation time
+            * ``categories`` -- list of six FRIA category dicts
+            * ``gaps`` -- list of category names with status ``"GAP"``
+            * ``overall_covered`` -- ``True`` when no ``GAP`` entries remain
+
+            Each category dict contains:
+
+            * ``name`` -- human-readable category label
+            * ``gate_source`` -- gate name(s) providing evidence
+            * ``status`` -- ``"COVERED"`` | ``"PARTIAL"`` | ``"GAP"``
+            * ``evidence`` -- list of human-readable evidence strings
+            * ``gate_state`` -- raw gate state (``"PASS"`` / ``"HOLD"`` / ``"FAIL"`` / ``"N/A"``)
+            * ``metric`` -- numeric metric value if available, else ``None``
+
+        Example::
+
+            result = constitution.evaluate(context)
+            fria = constitution.fria_evidence(result)
+
+            if not fria["overall_covered"]:
+                print("Gaps:", fria["gaps"])
+
+        Constitutional reference: Section 0.5 (citation mandate),
+        Section 0.7 HC-1/4/11/12/15 (hard-constraint evidence).
+        """
+        from datetime import datetime, timezone
+        from typing import Any
+
+        # result is caller-supplied; if None, all categories report GAP
+
+        gate_map = {}
+        hc_violations = []
+        state_str = "N/A"
+
+        if result is not None:
+            for gr in result.gate_results:
+                gate_map[gr.gate] = gr
+            hc_violations = result.hard_constraint_violations
+            state_str = result.system_state.value
+
+        # ------------------------------------------------------------------
+        # Internal helpers
+        # ------------------------------------------------------------------
+
+        def _gate_evidence(gate_name, fallback_gap):
+            """Map a single gate result to FRIA status + evidence strings."""
+            gr = gate_map.get(gate_name)
+            if gr is None:
+                return {
+                    "gate_state": "N/A",
+                    "metric": None,
+                    "status": "GAP",
+                    "evidence": [fallback_gap],
+                }
+            state_val = gr.state.value if hasattr(gr.state, "value") else str(gr.state)
+            if state_val == "PASS":
+                fria_status = "COVERED"
+            elif state_val == "HOLD":
+                fria_status = "PARTIAL"
+            else:
+                fria_status = "GAP"
+            evidence_lines = [gr.reason] if gr.reason else [fallback_gap]
+            return {
+                "gate_state": state_val,
+                "metric": gr.metric,
+                "status": fria_status,
+                "evidence": evidence_lines,
+            }
+
+        def _hc_evidence(hc_ids, gate_name, narrative):
+            """Supplement gate evidence with HC violation status."""
+            lines = [narrative]
+            for hc_id in hc_ids:
+                matched = [v for v in hc_violations if v.constraint_id == hc_id and v.violated]
+                if matched:
+                    lines.append(f"{hc_id} VIOLATED: {matched[0].description}")
+                else:
+                    lines.append(f"{hc_id} enforced ({gate_name})")
+            return lines
+
+        # ------------------------------------------------------------------
+        # Build the six FRIA categories (EU AI Act Article 27)
+        # ------------------------------------------------------------------
+
+        safety_g = _gate_evidence(
+            "RiskGate",
+            "RiskGate not evaluated -- safety evidence unavailable",
+        )
+        safety_g["name"] = "Safety and robustness"
+        safety_g["gate_source"] = "RiskGate + HC-1/7"
+        safety_g["evidence"] = _hc_evidence(
+            ["HC-1", "HC-7"],
+            "RiskGate",
+            safety_g["evidence"][0] if safety_g["evidence"] else "",
+        )
+
+        nondiscrim_g = _gate_evidence(
+            "EpistemicGate",
+            "EpistemicGate not evaluated -- bias evidence unavailable",
+        )
+        nondiscrim_g["name"] = "Non-discrimination and equal treatment"
+        nondiscrim_g["gate_source"] = "EpistemicGate"
+
+        oversight_g = _gate_evidence(
+            "AutonomyGate",
+            "AutonomyGate not evaluated -- human-oversight evidence unavailable",
+        )
+        oversight_g["name"] = "Human oversight and control"
+        oversight_g["gate_source"] = "AutonomyGate + HC-12"
+        oversight_g["evidence"] = _hc_evidence(
+            ["HC-12"],
+            "AutonomyGate",
+            oversight_g["evidence"][0] if oversight_g["evidence"] else "",
+        )
+
+        privacy_g = _gate_evidence(
+            "RiskGate",
+            "RiskGate not evaluated -- privacy evidence unavailable",
+        )
+        privacy_g["name"] = "Privacy and data governance"
+        privacy_g["gate_source"] = "RiskGate"
+
+        transparency_g = _gate_evidence(
+            "GovernanceGate",
+            "GovernanceGate not evaluated -- transparency evidence unavailable",
+        )
+        transparency_g["name"] = "Transparency and explainability"
+        transparency_g["gate_source"] = "GovernanceGate + HC-4/15"
+        transparency_g["evidence"] = _hc_evidence(
+            ["HC-4", "HC-15"],
+            "GovernanceGate",
+            transparency_g["evidence"][0] if transparency_g["evidence"] else "",
+        )
+
+        accountability_g = _gate_evidence(
+            "GovernanceGate",
+            "GovernanceGate not evaluated -- accountability evidence unavailable",
+        )
+        accountability_g["name"] = "Accountability and auditability"
+        accountability_g["gate_source"] = "GovernanceGate + HC-11/12"
+        accountability_g["evidence"] = _hc_evidence(
+            ["HC-11", "HC-12"],
+            "GovernanceGate",
+            accountability_g["evidence"][0] if accountability_g["evidence"] else "",
+        )
+
+        categories = [
+            safety_g,
+            nondiscrim_g,
+            oversight_g,
+            privacy_g,
+            transparency_g,
+            accountability_g,
+        ]
+
+        gaps = [c["name"] for c in categories if c["status"] == "GAP"]
+
+        return {
+            "eu_ai_act_article": "Article 27",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "system_state": state_str,
+            "categories": categories,
+            "gaps": gaps,
+            "overall_covered": len(gaps) == 0,
+        }
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
