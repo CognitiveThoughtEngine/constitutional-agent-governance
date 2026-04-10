@@ -13,17 +13,47 @@ pip install constitutional-agent
 
 ---
 
+## Who This Is For
+
+- **Platform teams** embedding agents into production systems that make autonomous decisions affecting real outcomes
+- **Agent framework builders** who need a governance layer above identity and policy enforcement
+- **Enterprise architects** evaluating autonomous AI deployment risk and liability exposure
+- **Teams that need EU AI Act Article 27 FRIA evidence** generated programmatically from live evaluation data
+
+If your agent answers questions only, with no economic or operational authority, this library is likely more than you need. If your agent executes, spends, publishes, or decides — read on.
+
+---
+
 ## The Problem: WHO and HOW Are Solved. WHY Is Not.
 
 AI agent governance has three structurally distinct layers. Most organizations have the first two. Almost none have the third.
 
-| Tier | Question | Tools | What It Misses |
-|------|----------|-------|----------------|
-| **WHO** | Is this agent authorized to act? | Microsoft Entra Agent ID, Okta, AWS IAM, Glasswing | An authorized agent making harmful, irrational, or unconstitutional decisions |
-| **HOW** | Is this action permitted by policy? | Microsoft AGT, NeMo Guardrails, LangChain, OWASP Agentic AI | Structurally bad decisions that are technically policy-compliant; scenarios no policy covers |
+| Tier | Question | Tools | What the layer can't address alone |
+|------|----------|-------|-------------------------------------|
+| **WHO** | Is this agent authorized to act? | Microsoft Entra Agent ID, Okta, AWS IAM, Glasswing | Authorization doesn't evaluate whether an authorized agent's decision is sound |
+| **HOW** | Is this action permitted by policy? | Microsoft AGT, NeMo Guardrails, LangChain, OWASP Agentic AI | Policy enforcement covers scenarios administrators wrote rules for — not novel ones |
 | **WHY** | Does this decision align with our constitutional principles? | **This library** | — |
 
 WHO governance gets the agent through the door. HOW governance enforces the rules written by administrators. Neither asks whether the agent's decision is *right* — aligned with the organization's mission, economic survival, and constitutional values. That's the WHY layer. It has been missing from every open-source governance toolkit until now.
+
+## Works Alongside Your Stack
+
+`constitutional-agent` is the third governance layer, not a replacement for the first two. Use Okta or Microsoft Entra for identity (WHO), OPA or Cedar or Microsoft AGT for policy enforcement (HOW), and `constitutional-agent` for decision quality governance at the top of that stack. The gates evaluate constitutional soundness after the agent is authorized and the action is policy-compliant — covering the scenarios your policy writers haven't written rules for yet.
+
+---
+
+## When to Use / When Not to Use
+
+**Use this when:**
+- Your agent makes autonomous decisions that affect real economic, operational, or reputational outcomes
+- You need governance evidence for compliance (EU AI Act, NIST AI RMF, internal audit)
+- You need a principled FREEZE/STOP mechanism, not just a policy lookup
+- You want gates to cover scenarios your policy writers haven't written rules for yet
+
+**Not the right fit when:**
+- You need real-time guardrails on LLM output tokens — use NeMo Guardrails, Lakera, or similar
+- You need identity and access management — use Okta, Entra, or Glasswing
+- Your agent has no economic or operational authority and only answers questions
 
 ---
 
@@ -356,5 +386,5 @@ MIT — fork it, adapt it, cite it.
 
 ---
 
-*Constitutional governance is the WHY layer.*  
+*Constitutional governance is the WHY layer.*
 *WHO = identity. HOW = behavior. WHY = values that survive any execution.*
