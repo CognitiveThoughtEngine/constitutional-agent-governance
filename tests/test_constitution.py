@@ -941,8 +941,6 @@ class TestFriaEvidence:
 
     def test_hold_gate_gives_partial(self):
         """A HOLD gate produces PARTIAL status for its FRIA category."""
-        from constitutional_agent import Constitution
-
         # GovernanceGate HOLD: metric_anomaly_score >= 0.60 (HOLD) and < 0.80 (FAIL)
         c = _make_constitution()
         ctx = dict(FULL_CONTEXT)
