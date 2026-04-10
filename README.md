@@ -24,6 +24,41 @@ If your agent answers questions only, with no economic or operational authority,
 
 ---
 
+## Architecture: Where This Fits
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Your AI Agent                      │
+└────────────────────────┬────────────────────────────┘
+                         │ wants to act
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│  WHY Layer — constitutional-agent (this library)     │
+│                                                      │
+│  EpistemicGate   RiskGate   GovernanceGate           │
+│  EconomicGate    AutonomyGate   ConstitutionalGate   │
+│                                                      │
+│  Evaluates: Is this decision sound?                  │
+│  Output: COMPOUND / RUN / THROTTLE / FREEZE / STOP   │
+└────────────────────────┬────────────────────────────┘
+                         │ decision quality passed
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│  HOW Layer — OPA · Cedar · Microsoft AGT             │
+│  Evaluates: Is this action permitted by policy?      │
+└────────────────────────┬────────────────────────────┘
+                         │ policy compliant
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│  WHO Layer — Okta · Entra · AWS IAM · Glasswing      │
+│  Evaluates: Is this agent authorized to act?         │
+└─────────────────────────────────────────────────────┘
+```
+
+Each layer addresses a structurally different governance question. `constitutional-agent` is the top layer — evaluating decision quality *after* identity and policy have already passed.
+
+---
+
 ## The Problem: WHO and HOW Are Solved. WHY Is Not.
 
 AI agent governance has three structurally distinct layers. Most organizations have the first two. Almost none have the third.
