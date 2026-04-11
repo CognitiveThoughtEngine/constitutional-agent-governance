@@ -69,7 +69,7 @@ AI agent governance has three structurally distinct layers. Most organizations h
 | **HOW** | Is this action permitted by policy? | Microsoft AGT, NeMo Guardrails, LangChain, OWASP Agentic AI | Policy enforcement covers scenarios administrators wrote rules for — not novel ones |
 | **WHY** | Does this decision align with our constitutional principles? | **This library** | — |
 
-WHO governance gets the agent through the door. HOW governance enforces the rules written by administrators. Neither asks whether the agent's decision is *right* — aligned with the organization's mission, economic survival, and constitutional values. That's the WHY layer. It has been missing from every open-source governance toolkit until now.
+WHO governance gets the agent through the door. HOW governance enforces the rules written by administrators. Neither asks whether the agent's decision is *right* — aligned with the organization's mission, economic survival, and constitutional values. That's the WHY layer. `constitutional-agent` complements identity and policy tools — it does not replace them.
 
 ## Works Alongside Your Stack
 
