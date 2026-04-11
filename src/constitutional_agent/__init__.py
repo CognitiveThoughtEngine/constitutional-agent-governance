@@ -58,7 +58,7 @@ from constitutional_agent.schema import (
     SystemState,
 )
 
-__version__ = "0.4.0b3"
+__version__ = "0.4.0"
 __author__ = "Cognitive Thought Engine LLC"
 __license__ = "MIT"
 __url__ = "https://github.com/CognitiveThoughtEngine/constitutional-agent-governance"

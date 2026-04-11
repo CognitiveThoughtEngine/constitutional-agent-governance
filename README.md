@@ -1,7 +1,7 @@
 # constitutional-agent
 
 [![Tests](https://github.com/CognitiveThoughtEngine/constitutional-agent-governance/actions/workflows/tests.yml/badge.svg)](https://github.com/CognitiveThoughtEngine/constitutional-agent-governance/actions/workflows/tests.yml)
-[![PyPI](https://img.shields.io/badge/pypi-v0.4.0b3-blue)](https://pypi.org/project/constitutional-agent/)
+[![PyPI](https://img.shields.io/badge/pypi-v0.4.0-blue)](https://pypi.org/project/constitutional-agent/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
@@ -152,7 +152,7 @@ else:
 
 ---
 
-## EU AI Act Article 27 — FRIA Output (v0.4.0 beta)
+## EU AI Act Article 27 — FRIA Output (v0.4.0)
 
 `constitution.fria_evidence(context)` maps all six gates to the six FRIA categories required by EU AI Act Article 27. Deployments subject to the Act must complete a Fundamental Rights Impact Assessment before going live; this method generates structured evidence directly from live evaluation data.
 

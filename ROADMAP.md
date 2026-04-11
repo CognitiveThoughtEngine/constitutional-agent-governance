@@ -1,12 +1,12 @@
 # constitutional-agent Roadmap
 
-**Current stable:** v0.3.2 | **Current beta:** v0.4.0b3
+**Current stable:** v0.4.0
 
 ---
 
-## v0.4.0 — Persistence & Observability (beta now, stable Q3 2026)
+## v0.4.0 — Persistence & Observability (stable — 2026-04-11)
 
-The beta release validates the core persistence and observability surface before locking the API.
+The stable release locks the persistence and observability API surface. No breaking changes from v0.4.0b3.
 
 ### Included in beta
 

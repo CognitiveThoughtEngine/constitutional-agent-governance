@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.4.0] - 2026-04-11
+
+Stable release — same functionality as v0.4.0b3. Production-validated: CGST self-assessment 63/100.
+
+No breaking changes from v0.4.0b3. Promoting from beta to stable after validation period.
+
+---
+
 ## [0.3.0] - 2026-04-09
 
 ### Fixed (critical-review issues)
