@@ -390,15 +390,25 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 
 ## The Reference Implementation
 
-This library is extracted from the HRAO-E Constitutional Framework, production-validated over 95 days:
+This library is a portable extract from the HRAO-E Constitutional Framework — a production autonomous organization that has operated under constitutional governance for 98 days.
 
+**This library:**
+- **77 test functions** across 2 test modules, 0 failed
+- **12 hard constraints** (HC-1 through HC-12) enforced in code
+- **6 constitutional gates** (EG, RG, GG, EPG, AAG, CGG)
+- `fria_evidence()` generates EU AI Act Article 27 FRIA evidence programmatically
+
+**The production system this was extracted from (HRAO-E):**
 - **52 agents** operating under constitutional governance per cycle
 - **64 constitutional amendments** ratified through formal process
-- **1,808 test functions**, 0 failed
-- **17 hard constraints** enforced programmatically (not in policy files)
-- **Real economic pressure**: $720/month burn, 10.1-month runway, $0 MRR
+- **1,929 test functions**, 0 failed
+- **17 hard constraints** (HC-1 through HC-17, including 5 additional production constraints)
+
+The library ships HC-1 through HC-12 — the portable, organization-agnostic core. HC-13 through HC-17 are HRAO-E-specific operational constraints not included in the library.
 
 The framework has been cited in NIST submissions (800-2, Agent Identity) and acknowledged by CAISI. Five preprints published on Zenodo.
+
+**Self-assessment:** We ran the Constitutional AI Governance Stress Test (CGST) on this library before offering it as a service. Score: **63/100 (Governance Draft)**. Ungoverned baseline: 6/100. [Full report](https://www.cteinvest.com/blog/cgst-self-assessment-constitutional-agent.html).
 
 ---
 
