@@ -7,8 +7,48 @@
 
 **The governance layer your AI agent is missing.**
 
+Extracted from HRAO-E: 98 days in production, 52 agents, 1,929 governance evaluations. Cited in NIST AI 800-2 submissions.
+
+> **Note:** PyPI badge above shows v0.4.0; the current published version is 0.3.2.
+
+### Quick Start
+
 ```bash
 pip install constitutional-agent
+```
+
+```python
+from constitutional_agent import Constitution
+
+constitution = Constitution.from_defaults()
+result = constitution.evaluate({
+    # Safety gate
+    "failing_tests": 0, "hours_since_last_execution": 4,
+    # Economic gate
+    "proposed_spend": 100, "approved_budget": 500,
+    "stage": "pre_revenue", "runway_months": 8.5,
+    # Governance gate
+    "gate_override_without_amendment": False,
+    "audit_coverage": 0.97, "test_pass_rate": 0.98,
+    "enforcement_coverage": 0.88, "amendments_per_month": 2,
+    # Epistemic gate
+    "verification_pass_rate": 0.85, "uncertainty_disclosure_rate": 0.90,
+    "assumption_volatility": 0.10, "disagreement_persistence": 0.05,
+    "knowledge_freshness": 0.75,
+    # Risk gate
+    "misuse_risk_index": 0.05, "irreversibility_score": 0.10,
+    # Security gate
+    "channel_health": 0.92, "security_critical_events": 0,
+    "security_high_events": 0, "control_bypass_attempts": 0,
+    # Autonomy metrics
+    "dli_completion_rate": 0.12, "user_return_rate": 0.22,
+    "value_demo_count": 4, "human_minutes_per_day": 25.0,
+    "decisions_per_day": 153, "agent_activation_rate": 0.78,
+    "escalations_per_day": 2, "auto_recovery_rate": 0.88,
+    "lessons_learned_weekly": 3, "bug_recurrence_rate": 0.04,
+})
+
+print(result.system_state.value)  # -> RUN
 ```
 
 ---
