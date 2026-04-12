@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "constitutional-agent"
-version = "0.4.0"
+version = "0.4.1"
 description = "WHY-layer constitutional governance for autonomous AI agents"
 readme = "README.md"
 license = {text = "MIT"}
@@ -32,6 +32,9 @@ dev = [
     "ruff>=0.3",
     "types-PyYAML>=6.0",
 ]
+
+[project.scripts]
+constitutional-agent = "constitutional_agent.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/CognitiveThoughtEngine/constitutional-agent-governance"
