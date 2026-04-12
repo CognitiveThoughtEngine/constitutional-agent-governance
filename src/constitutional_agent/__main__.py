@@ -25,7 +25,11 @@ def main() -> None:
         "enforcement_coverage": 0.88,
     })
 
-    G = "\033[32m"; Y = "\033[33m"; R = "\033[31m"; B = "\033[1m"; Z = "\033[0m"
+    G = "\033[32m"
+    Y = "\033[33m"
+    R = "\033[31m"
+    B = "\033[1m"
+    Z = "\033[0m"
     COLOR = {"PASS": G, "HOLD": Y, "FAIL": R}
 
     state = result.system_state.value
