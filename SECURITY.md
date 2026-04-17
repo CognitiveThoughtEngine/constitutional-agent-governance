@@ -36,8 +36,9 @@ Open a GitHub issue using the bug report template. No embargo needed.
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x (latest) | Yes |
-| < 0.1.0 | No |
+| 0.5.x (current) | Yes |
+| 0.4.x | Security fixes only |
+| < 0.4.0 | No |
 
 ## The Fail-CLOSED Principle
 

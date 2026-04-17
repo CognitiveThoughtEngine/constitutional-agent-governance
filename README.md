@@ -1,15 +1,13 @@
 # constitutional-agent
 
 [![Tests](https://github.com/CognitiveThoughtEngine/constitutional-agent-governance/actions/workflows/tests.yml/badge.svg)](https://github.com/CognitiveThoughtEngine/constitutional-agent-governance/actions/workflows/tests.yml)
-[![PyPI](https://img.shields.io/badge/pypi-v0.4.0-blue)](https://pypi.org/project/constitutional-agent/)
+[![PyPI](https://img.shields.io/pypi/v/constitutional-agent)](https://pypi.org/project/constitutional-agent/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 **The governance layer your AI agent is missing.**
 
 Extracted from HRAO-E: 98 days in production, 52 agents, 1,929 governance evaluations. Cited in NIST AI 800-2 submissions.
-
-> **Note:** PyPI badge above shows v0.4.0; the current published version is 0.3.2.
 
 ### Quick Start
 
@@ -140,7 +138,7 @@ $6.74 earned. 200 runs. 41 days. Four failure modes that constitutional governan
 
 | Failure | Duration | Constitutional Gate | Caught By |
 |---------|---------|-------------------|-----------|
-| Broken Lightning wallet — accepted payments, never settled | Weeks | HC-11 + EpistemicGate | `hours_since_settlement_confirmation > 24` → STOP |
+| Broken Lightning wallet — accepted payments, never settled | Weeks | HC-11 + EpistemicGate | `hours_since_last_execution > 24` → STOP |
 | Mispriced Lightning actors at $0.00005 (wrong by orders of magnitude) | ~30 runs | EpistemicGate | `assumption_volatility` high — external verification required before execution |
 | Shadow-banned by HN, kept posting for 30 runs | 30+ runs | RiskGate | `channel_health = 0%` → FAIL — stop spending on dead channels |
 | Strategy locked on MCP servers for 30 runs, zero conversion | 30+ runs | ConstitutionalGate | `lessons_learned_weekly = 0` → FAIL — document what you learned or stop |
@@ -208,7 +206,7 @@ report   = fria_narrative(evidence)             # human-readable markdown
 # Non-discrimination       -> EpistemicGate
 # Human oversight          -> AutonomyGate + HC-12
 # Privacy & data governance -> RiskGate
-# Transparency             -> GovernanceGate + HC-4/15
+# Transparency             -> GovernanceGate + HC-4/11
 # Accountability           -> GovernanceGate + HC-11/12
 
 if summary["overall_status"] != "compliant":
@@ -373,7 +371,7 @@ if result.state == GateState.FAIL:
 pip install constitutional-agent
 ```
 
-**Requirements:** Python 3.11+, pydantic >= 2.6, pyyaml >= 6.0
+**Requirements:** Python 3.11+, pyyaml >= 6.0
 
 **From source:**
 ```bash
@@ -433,7 +431,7 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 This library is a portable extract from the HRAO-E Constitutional Framework — a production autonomous organization that has operated under constitutional governance for 98 days.
 
 **This library:**
-- **77 test functions** across 2 test modules, 0 failed
+- **150 test functions** across 3 test modules, 0 failed
 - **12 hard constraints** (HC-1 through HC-12) enforced in code
 - **6 constitutional gates** (EG, RG, GG, EPG, AAG, CGG)
 - `fria_evidence()` generates EU AI Act Article 27 FRIA evidence programmatically

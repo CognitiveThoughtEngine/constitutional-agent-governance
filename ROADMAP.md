@@ -1,6 +1,6 @@
 # constitutional-agent Roadmap
 
-**Current stable:** v0.4.0
+**Current stable:** v0.5.0
 
 ---
 
@@ -18,7 +18,7 @@ The stable release locks the persistence and observability API surface. No break
 - Full YAML operator coverage: `eq`, `ne`, `lt`, `lte`, `gt`, `gte`
 - Strict mode with `_KNOWN_GATE_METRICS` overlap detection
 - `fria_evidence(context)` — EU AI Act Article 27 FRIA output; `fria.py` module with `FRIAEvidence`, `fria_summary()`, `fria_narrative()`
-- 160 tests, 97% coverage, mypy strict, Python 3.11–3.13
+- 150 tests, 97% coverage, mypy strict, Python 3.11–3.13
 
 ### What the beta is testing
 

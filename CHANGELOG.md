@@ -7,6 +7,47 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.5.0] - 2026-04-17
+
+### Fixed
+
+- Replaced hardcoded PyPI badge with dynamic shield (`img.shields.io/pypi/v`)
+- Removed stale "current published version is 0.3.2" note from README
+- Fixed requirements line: removed pydantic reference (removed in v0.3.0)
+- Fixed test count: 150 test functions across 3 test modules (was 77/2)
+- Fixed FRIA transparency mapping: HC-4/11 (HC-15 does not exist)
+- Fixed case study metric key: `hours_since_last_execution` (was `hours_since_settlement_confirmation`)
+- Fixed ROADMAP test count: 150 tests (was 160)
+- Fixed SECURITY.md supported versions table (was 0.1.x)
+- Updated HRAO-E test count in `__init__.py` docstring to 1,929 (matching README)
+- Removed dead `password` line from publish.yml (OIDC trusted publishing is used)
+
+### Added
+
+- Python 3.13 classifier in pyproject.toml
+- CHANGELOG entries for v0.4.1 and FRIA feature documentation
+
+---
+
+## [0.4.1] - 2026-04-14
+
+### Added
+
+- CLI demo entry point: `python -m constitutional_agent`
+- LangGraph, CrewAI, and OpenAI Agents SDK integration quickstarts in README
+
+### Fixed
+
+- Ruff E702 lint errors in `__main__.py`
+- Excluded CLI entry point from coverage threshold
+
+### Changed
+
+- README: surfaced Quick Start and social proof above the fold
+- README: softened vendor framing to "complements" (reviewer feedback)
+
+---
+
 ## [0.4.0] - 2026-04-11
 
 Stable release — same functionality as v0.4.0b3. Production-validated: CGST self-assessment 63/100.

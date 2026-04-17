@@ -4,7 +4,7 @@ constitutional-agent
 WHY-layer constitutional governance for autonomous AI agents.
 
 Based on the HRAO-E Constitutional Framework, production-validated over
-95 days with 52 agents, 64 constitutional amendments, and 1,808 tests.
+95 days with 52 agents, 64 constitutional amendments, and 1,929 tests.
 
 Core concepts:
     Constitution:   The agent's governing document. Load from governance.yaml.
@@ -58,7 +58,7 @@ from constitutional_agent.schema import (
     SystemState,
 )
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 __author__ = "Cognitive Thought Engine LLC"
 __license__ = "MIT"
 __url__ = "https://github.com/CognitiveThoughtEngine/constitutional-agent-governance"
