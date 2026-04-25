@@ -463,6 +463,16 @@ Hard constraint changes require a comment from a maintainer before merge. Gate t
 
 ---
 
+## Citation
+
+If you cite this work in research:
+
+> Saleme, M. K. (2026). *Constitutional Agent Governance* — six-gate decision governance framework with 12 hard constraints. ORCID: [0009-0003-6736-1900](https://orcid.org/0009-0003-6736-1900). https://github.com/CognitiveThoughtEngine/constitutional-agent-governance
+
+Related Zenodo preprints: CSG ([10.5281/zenodo.19162104](https://doi.org/10.5281/zenodo.19162104)), Beyond Identity Governance ([10.5281/zenodo.19343034](https://doi.org/10.5281/zenodo.19343034)).
+
+---
+
 ## License
 
 MIT — fork it, adapt it, cite it.
