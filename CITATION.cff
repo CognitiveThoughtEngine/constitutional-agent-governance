@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you cite this work in research, please use this metadata."
+title: "Constitutional Agent Governance"
+abstract: "Six-gate decision governance framework with 12 hard constraints for autonomous AI agents. Includes amendment protocol, FRIA documentation for EU AI Act Article 27 compliance, and 150 tests at 97% coverage."
+type: software
+authors:
+  - family-names: Saleme
+    given-names: Michael K.
+    orcid: "https://orcid.org/0009-0003-6736-1900"
+repository-code: "https://github.com/CognitiveThoughtEngine/constitutional-agent-governance"
+url: "https://pypi.org/project/constitutional-agent/"
+license: MIT
+date-released: "2026-04-25"
+keywords:
+  - ai-governance
+  - agent-safety
+  - constitutional-ai
+  - eu-ai-act
+  - hard-constraints
+  - decision-governance
+references:
+  - type: article
+    title: "Constitutional Self-Governance (CSG)"
+    doi: "10.5281/zenodo.19162104"
+    authors:
+      - family-names: Saleme
+        given-names: Michael K.
+        orcid: "https://orcid.org/0009-0003-6736-1900"
+  - type: article
+    title: "Beyond Identity Governance"
+    doi: "10.5281/zenodo.19343034"
+    authors:
+      - family-names: Saleme
+        given-names: Michael K.
+        orcid: "https://orcid.org/0009-0003-6736-1900"
