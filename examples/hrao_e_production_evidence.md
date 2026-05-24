@@ -10,20 +10,13 @@ The HRAO-E framework has run continuously across an agentic content-governance p
 
 ## The 19-Retraction Pattern (R-001 through R-019)
 
-Every incident is logged with: ID, detection cycle, status, overstate description, evidence, remediation, and a binding forward rule. Aggregate pattern across 19 entries:
+Every incident is logged with: ID, detection cycle, status, overstate description, evidence, remediation, and a binding forward rule.
 
-| Class | Count | Gate / HC that caught it |
-|---|---|---|
-| Sub-agent overstate (claimed completion not done) | 3 | EpistemicGate + R-019 verification-grep rule |
-| Comfort-over-truth (synthesis softened reality) | 3 | EpistemicGate `verification_pass_rate` + §0.6.1 |
-| Auditor-trust failure (auditor claim accepted without spot-check) | 3 | EpistemicGate + R-015 verifier-on-auditor rule |
-| Metric/arithmetic error in scoring | 2 | GovernanceGate metric integrity |
-| Probe exit-code capture bug (silent green-stamping) | 1 | GovernanceGate metric integrity |
-| "Exhausted work" claim without verification sweep | 1 | EpistemicGate + R-018 verification-sweep mandate |
-| Source-attribution mismatch in handoff pack | 1 | EpistemicGate zero-trust verifier |
-| Other (historical migration / phrasing / operational) | 5 | Mixed (mostly self-detected in next cycle) |
+The 19 entries span several classes including: **sub-agent overstate** (orchestrator claims completion not actually done), **comfort-over-truth synthesis** (scoring or framing softened against reality), **auditor-trust failure** (sub-agent claim accepted without spot-check; closed as FALSE POSITIVE in some cases), **metric/arithmetic errors in scoring**, **probe exit-code capture** (silent green-stamping), **"exhausted-work" claims without verification sweep**, **source-attribution mismatches in handoff packs**, and operational/phrasing corrections from earlier cycles. See the deployment's append-only ledger for the full class breakdown.
 
-**Close rate:** 19/19. **Zero incidents reached customer-facing or investor-facing surfaces post-detection.** Median detection latency: 1 cycle (next AFI cycle, next sweep, or next verification wave).
+**Close rate:** 19/19. Zero incidents reached customer-facing or investor-facing surfaces post-detection. Most were detected within 1 cycle of the producing event (next AFI cycle, next sweep, or next verification wave); a small number persisted longer before being caught by a downstream audit.
+
+*Note on the code examples below — metric names and threshold values are illustrative; consult each gate's spec in `src/constitutional_agent/` for canonical names and the library's current threshold defaults.*
 
 ---
 
@@ -51,7 +44,7 @@ result = constitution.evaluate({
 #          Apply mandatory pre-commit verification grep before next dispatch."
 ```
 
-**Forward rule (binding):** any sub-agent claim of *"N files / N surfaces / N tests refactored"* gets a verification grep BEFORE the orchestrator commits or reports success. Templates: `grep -cE "@/components/(ui|viz)/" <file>` per claimed file. Result: 15+ subsequent waves with **zero** sub-agent-overstate incidents.
+**Forward rule (binding):** any sub-agent claim of *"N files / N surfaces / N tests refactored"* gets a verification grep BEFORE the orchestrator commits or reports success. Templates: `grep -cE "@/components/(ui|viz)/" <file>` per claimed file. Result: subsequent waves applied the rule; no same-class incident has been added to the ledger since R-019 closed.
 
 ---
 
@@ -139,10 +132,10 @@ result = constitution.evaluate({
 
 Across 19 incidents in this 98-day production deployment:
 
-1. **100% detection rate within 1 cycle** (next AFI cycle, next sweep, or next verification wave)
+1. **All 19 detected** via the AFI / sweep / verification-wave discipline (most within 1 cycle of the producing event; a small number persisted longer before downstream audit caught them)
 2. **100% closure rate** (19/19 retractions closed with a binding forward rule)
-3. **0 incidents reached external surface** (no broken customer demo, no fabricated investor metric, no false-positive bug fix against working code)
-4. **Compounding return** — each closed retraction added a binding forward rule that prevented same-class incidents in subsequent waves. R-019's verification-grep rule has prevented an estimated 10+ sub-agent-overstate incidents in the 15+ waves since.
+3. **0 incidents reached customer-facing or investor-facing surfaces** (no broken customer demo, no fabricated investor metric, no false-positive bug fix against working code)
+4. **Compounding return** — each closed retraction added a binding forward rule, and the same-class pattern (R-014, R-017, R-019 were all sub-agent-overstate; R-004, R-012 were both arithmetic) did not recur after the corresponding rule landed. Counterfactual prevented-incident counts are not measured.
 
 The gates do not slow delivery. The retraction-ledger discipline reframes "comfort-over-truth shipping" as the slow path: every retraction recorded today is a class of incident that does not get repeated tomorrow.
 
