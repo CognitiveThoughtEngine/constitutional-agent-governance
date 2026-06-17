@@ -9,6 +9,14 @@
 
 Extracted from HRAO-E: 98 days in production, 52 agents, 1,929 governance evaluations. Cited in NIST AI 800-2 submissions.
 
+### Where this sits
+
+constitutional-agent is the **WHY** layer, not the **HOW**.
+
+Policy-enforcement toolkits — zero-trust identity, execution sandboxing, runtime gates (e.g. Microsoft's Agent Governance Toolkit) — answer *can this action execute?* constitutional-agent answers a prior question: *should the agent be permitted to act at all, given its constitution, six gates, and twelve hard constraints?*
+
+Enforcement toolkits sit at the execution boundary; the constitution sits above them, and an amendment protocol governs the constitution itself. Run both — they compose at different altitudes.
+
 ### Quick Start
 
 ```bash
