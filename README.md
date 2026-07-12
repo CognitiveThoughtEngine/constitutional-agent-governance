@@ -5,9 +5,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-**The governance layer your AI agent is missing.**
+**Decision governance for autonomous AI agents — the WHY layer.**
 
-Extracted from HRAO-E: 98 days in production, 52 agents, 1,929 governance evaluations. Cited in NIST AI 800-2 submissions.
+Your agent is authenticated (**WHO**) and inside its permissions (**HOW**). This library answers the question those layers can't: **is the _authorized_ action _sound_ — given its constitution, six gates, and twelve hard constraints — evaluated before it commits?**
+
+Extracted from HRAO-E: 98 days in production, 52 agents, 1,929 governance evaluations. Cited in NIST AI 800-2 submissions. Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
+
+> **Maturity, honestly:** the six gates, execution states, twelve hard constraints, and EU AI Act Article 27 FRIA evidence ship today. Stateful _cross-session cumulative-risk composition_ — catching that specific aggregate — is the next step on the [roadmap](ROADMAP.md), not yet shipped.
 
 ### Where this sits
 
@@ -428,8 +432,10 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 - **Constitutional Governance Review** (2-hour assessment, written report, top 3 gaps + remediation roadmap): [cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html#assessment](https://www.cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html)
 
 **Research preprints (DOI):**
+- Constitutional Self-Governance — the six-gate model (production study): [10.5281/zenodo.19162104](https://doi.org/10.5281/zenodo.19162104)
+- Beyond Identity Governance — identity is necessary but not sufficient: [10.5281/zenodo.19343034](https://doi.org/10.5281/zenodo.19343034)
+- Authorized but Refused — telemetry of governance refusing authenticated agents: [10.5281/zenodo.21263262](https://doi.org/10.5281/zenodo.21263262)
 - DLI Framework: [10.5281/zenodo.18217577](https://doi.org/10.5281/zenodo.18217577)
-- Harness Design: [10.5281/zenodo.19343034](https://doi.org/10.5281/zenodo.19343034)
 - Community Security Governance: [10.5281/zenodo.19343108](https://doi.org/10.5281/zenodo.19343108)
 
 ---
@@ -452,7 +458,7 @@ This library is a portable extract from the HRAO-E Constitutional Framework — 
 
 The library ships HC-1 through HC-12 — the portable, organization-agnostic core. HC-13 through HC-17 are HRAO-E-specific operational constraints not included in the library.
 
-The framework has been cited in NIST submissions (800-2, Agent Identity) and acknowledged by CAISI. Five preprints published on Zenodo.
+The framework has been cited in NIST submissions (800-2, Agent Identity) and acknowledged by CAISI. Eight preprints published on Zenodo.
 
 **Self-assessment:** We ran the Constitutional AI Governance Stress Test (CGST) on this library before offering it as a service. Score: **63/100 (Governance Draft)**. Ungoverned baseline: 6/100. [Full report](https://www.cteinvest.com/blog/cgst-self-assessment-constitutional-agent.html).
 
