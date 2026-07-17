@@ -11,7 +11,7 @@ Your agent is authenticated (**WHO**) and inside its permissions (**HOW**). This
 
 Extracted from HRAO-E: 98 days in production, 52 agents, 1,929 governance evaluations. Cited in NIST AI 800-2 submissions. Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
 
-> **Maturity, honestly:** the six gates, execution states, twelve hard constraints, and EU AI Act Article 27 FRIA evidence ship today. Stateful _cross-session cumulative-risk composition_ — catching that specific aggregate — is the next step on the [roadmap](ROADMAP.md), not yet shipped.
+> **Maturity, honestly:** the six gates, execution states, twelve hard constraints, and EU AI Act Article 27 FRIA evidence have shipped since v0.4. Stateful _cross-session cumulative-risk composition_ — catching that specific aggregate — **shipped in v0.6.0** (the `composition` module; see below). It is new: battle-tested in unit tests and modeled on the measured AgentCore gap, but not yet hardened across as many production-days as the core gates.
 
 ### Where this sits
 
@@ -20,6 +20,49 @@ constitutional-agent is the **WHY** layer, not the **HOW**.
 Policy-enforcement toolkits — zero-trust identity, execution sandboxing, runtime gates (e.g. Microsoft's Agent Governance Toolkit) — answer *can this action execute?* constitutional-agent answers a prior question: *should the agent be permitted to act at all, given its constitution, six gates, and twelve hard constraints?*
 
 Enforcement toolkits sit at the execution boundary; the constitution sits above them, and an amendment protocol governs the constitution itself. Run both — they compose at different altitudes.
+
+---
+
+## What makes this different: cross-session risk composition
+
+Every vendor-neutral governance engine shipped in 2026 — Microsoft ACS, Galileo
+Agent Control, Runlayer, NVIDIA OpenShell — is **stateless**: it scores each
+action in isolation and forgets it. They all share one blind spot. **An agent
+can pass every individual gate and still be dangerous over a sequence.** Ten
+actions that are each 0.5 on a 0–1 risk scale — all comfortably below any
+per-call threshold — compose into a trajectory no single evaluation flags.
+
+`constitutional-agent` is the one that remembers. The `ComposedEvaluator`
+accumulates a risk weight per decision, composes it across a rolling window
+(optionally with time decay), and escalates the system state when the
+*accumulation* crosses a line — **even when every contributing decision, and all
+six memoryless gates, passed.** Point it at the durable `SqliteRiskStore` and the
+risk an agent built up yesterday still counts today.
+
+```python
+from constitutional_agent import ComposedEvaluator, AccumulatedRiskComposer, SqliteRiskStore
+
+# Durable store -> composition survives restarts and spans sessions.
+evaluator = ComposedEvaluator(
+    composer=AccumulatedRiskComposer(store=SqliteRiskStore("risk.db")),
+)
+
+# Each decision is individually fine (misuse 0.5 < the 0.65 per-call HOLD)...
+decision = {"misuse_risk_index": 0.5, "runway_months": 10, "lessons_learned_weekly": 3}
+for _ in range(7):
+    result = evaluator.evaluate(decision, subject="pricing-agent")
+
+print(result.per_call_state.value)  # RUN   — the six gates see nothing wrong
+print(result.system_state.value)    # FREEZE — the trajectory did
+print(result.escalated)             # True
+print(result.composition.reason)    # cites the accumulated-risk threshold + evidence
+```
+
+This is the WHY layer's stateful edge: WHO governs identity, HOW governs each
+action, and only composition governs what **delegated autonomous authority**
+accumulates across a whole session. See [ROADMAP.md](ROADMAP.md) (v0.6.0).
+
+---
 
 ### Quick Start
 

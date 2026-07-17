@@ -47,7 +47,32 @@ The core design question is whether Coalition governance should be pull-based (e
 
 ---
 
-## v0.6.0 — Adaptive Thresholds
+## v0.6.0 — Cross-Session Risk Composition (stable — 2026-07-16)
+
+The differentiator. Every other vendor-neutral governance engine is stateless /
+per-intervention; this release adds the layer that composes accumulated risk
+across decisions and sessions, catching the failure mode where an agent passes
+every individual gate but the trajectory does not.
+
+### Shipped
+
+- **`composition` module** — `ComposedEvaluator`, `AccumulatedRiskComposer`,
+  `CompositionResult`, and a pluggable `RiskStore` (`InMemoryRiskStore` default,
+  `SqliteRiskStore` for durable cross-session persistence).
+- **Two detectors** — accumulated magnitude and sustained sub-threshold elevation.
+- **Optional time decay** (`half_life_seconds`); injectable clock for determinism.
+- **Auditable** — every `CompositionResult` carries the contributing events.
+- 24 new tests; mypy strict + ruff clean; backward compatible.
+
+### Open question
+
+Whether risk weights should compose linearly (current) or with interaction terms
+(e.g. irreversibility × misuse compounding super-linearly). Production data from
+HRAO-E will inform whether the linear default needs a pluggable composition function.
+
+---
+
+## v0.7.0 — Adaptive Thresholds
 
 Gates that learn from evaluation history.
 

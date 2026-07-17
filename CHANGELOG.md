@@ -7,6 +7,41 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.6.0] - 2026-07-16
+
+### Added — Cross-Session Risk Composition (the stateful layer)
+
+The six gates are memoryless: each `evaluate()` scores one decision and forgets
+it. Every vendor-neutral governance engine shipped in H1 2026 (Microsoft ACS,
+Galileo Agent Control, Runlayer, NVIDIA OpenShell) is stateless the same way —
+and shares the same blind spot: an agent can pass every individual gate and
+still be dangerous over a sequence. This release adds the layer that remembers.
+
+- **`composition` module** — accumulates a scalar risk weight per decision,
+  keyed by subject, and composes it across a rolling window. Escalates the
+  system state when the *accumulation* crosses a threshold even though every
+  contributing decision passed on its own.
+- **`ComposedEvaluator`** — wraps `SixGateEvaluator`; returns the more severe of
+  the per-call verdict and the composed verdict. Can push a system every gate
+  rated RUN into THROTTLE or FREEZE. `.escalated` flags when the sequence tripped
+  what no single decision did.
+- **`AccumulatedRiskComposer`** — two detectors: accumulated magnitude (many
+  small risks add up) and sustained elevation (a slow burn that never spikes).
+  Optional exponential time-decay via `half_life_seconds`. Clock is injectable
+  for deterministic evaluation.
+- **Pluggable `RiskStore`** — `InMemoryRiskStore` (default, non-persistent) and
+  `SqliteRiskStore` (stdlib, durable) so composition spans process restarts and
+  sessions. Bring your own Postgres adapter by satisfying the protocol.
+- **`CompositionResult`** carries the exact events that drove it — the risk
+  trajectory is the audit evidence.
+- 24 new tests (composition), including the marquee case: N sub-threshold
+  decisions that per-call gating passes but composition catches, and cross-
+  session persistence across composer instances sharing a SQLite file.
+
+Backward compatible: no changes to existing gate or `Constitution` APIs.
+
+---
+
 ## [0.5.0] - 2026-04-17
 
 ### Fixed

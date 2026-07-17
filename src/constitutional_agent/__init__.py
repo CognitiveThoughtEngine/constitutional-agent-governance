@@ -34,6 +34,17 @@ Quick start:
 WHO governs identity. HOW governs behavior. WHY governs values.
 """
 
+from constitutional_agent.composition import (
+    AccumulatedRiskComposer,
+    ComposedEvaluator,
+    ComposedSystemResult,
+    CompositionResult,
+    InMemoryRiskStore,
+    RiskEvent,
+    RiskStore,
+    SqliteRiskStore,
+    default_risk_weight,
+)
 from constitutional_agent.constitution import Constitution, ConstitutionalViolation
 from constitutional_agent.gates import (
     AutonomyGate,
@@ -58,7 +69,7 @@ from constitutional_agent.schema import (
     SystemState,
 )
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __author__ = "Cognitive Thought Engine LLC"
 __license__ = "MIT"
 __url__ = "https://github.com/CognitiveThoughtEngine/constitutional-agent-governance"
@@ -80,6 +91,16 @@ __all__ = [
     "HardConstraint",
     "HardConstraintResult",
     "check_hard_constraints",
+    # Cross-session risk composition — the stateful layer
+    "ComposedEvaluator",
+    "ComposedSystemResult",
+    "AccumulatedRiskComposer",
+    "CompositionResult",
+    "RiskEvent",
+    "RiskStore",
+    "InMemoryRiskStore",
+    "SqliteRiskStore",
+    "default_risk_weight",
     # Schema / types
     "GateState",
     "GateResult",
