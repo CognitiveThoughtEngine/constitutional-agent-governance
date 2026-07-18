@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from constitutional_agent import Constitution
 from constitutional_agent.fria import (
+    Article27Applicability,
     Article27Element,
     EvidenceSource,
     FRIACategory,
@@ -113,8 +114,11 @@ def test_support_package_is_labeled_support_not_complete_fria():
     assert pkg["artifact"] == "FRIA-support package"
     assert "NOT a complete" in pkg["disclaimer"]
     assert len(pkg["article_27_1_crosswalk"]) == 6
-    # Missing deployer context -> not complete.
-    assert pkg["article_27_1_readiness"]["complete"] is False
+    # Missing deployer context -> crosswalk fields not present-and-reviewed.
+    assert pkg["article_27_1_readiness"]["crosswalk_fields_present_and_reviewed"] is False
+    # The readiness dict must NOT carry a `complete` key (it would overclaim a
+    # finished FRIA).
+    assert "complete" not in pkg["article_27_1_readiness"]
 
 
 def test_support_package_complete_requires_all_present_and_reviewed():
@@ -131,7 +135,7 @@ def test_support_package_complete_requires_all_present_and_reviewed():
     r = pkg["article_27_1_readiness"]
     assert r["by_source"][EvidenceSource.MISSING.value] == 0
     assert r["legally_reviewed"] == 6
-    assert r["complete"] is True
+    assert r["crosswalk_fields_present_and_reviewed"] is True
 
 
 def test_constitution_fria_support_package_integration():
@@ -139,3 +143,42 @@ def test_constitution_fria_support_package_integration():
     pkg = c.fria_support_package({"misuse_risk_index": 0.05, "runway_months": 10})
     assert "article_27_1_crosswalk" in pkg
     assert pkg["internal_governance_evidence"]["total_categories"] == 6
+
+
+# ---------------------------------------------------------------------------
+# Pre-merge review corrections: readiness key rename (item 8) + Article 27
+# applicability status (item 9)
+# ---------------------------------------------------------------------------
+
+def test_readiness_key_renamed_and_no_complete_key():
+    # Item 8: `complete` -> `crosswalk_fields_present_and_reviewed`; no key named
+    # `complete` may imply a finished FRIA.
+    pkg = fria_support_package(ALL_GATES, [])
+    readiness = pkg["article_27_1_readiness"]
+    assert "crosswalk_fields_present_and_reviewed" in readiness
+    assert "complete" not in readiness
+
+
+def test_applicability_defaults_to_not_assessed():
+    # Item 9: six populated elements must NOT imply applicability.
+    pkg = fria_support_package(ALL_GATES, [])
+    assert pkg["article_27_applicability"] == Article27Applicability.NOT_ASSESSED.value
+    assert pkg["article_27_applicability"] == "not_assessed"
+
+
+def test_applicability_reflects_deployer_context():
+    pkg = fria_support_package(
+        ALL_GATES, [], deployer_context={"applicability": "out_of_scope"}
+    )
+    assert pkg["article_27_applicability"] == "out_of_scope"
+
+
+def test_applicability_accepts_enum_and_ignores_garbage():
+    pkg_enum = fria_support_package(
+        ALL_GATES, [], deployer_context={"applicability": Article27Applicability.IN_SCOPE}
+    )
+    assert pkg_enum["article_27_applicability"] == "in_scope"
+    pkg_bad = fria_support_package(
+        ALL_GATES, [], deployer_context={"applicability": "banana"}
+    )
+    assert pkg_bad["article_27_applicability"] == "not_assessed"

@@ -21,7 +21,9 @@ from constitutional_agent.authority import (
     AuthorityRegistry,
     IdentityVerifier,
     SqliteAmendmentStore,
+    bounded_verifier,
     canonical_principal,
+    redact_secrets,
     scrub_evidence,
 )
 
@@ -505,3 +507,207 @@ def test_authority_level_coerce():
         AuthorityLevel.coerce("nope")
     with pytest.raises(ValueError):
         AuthorityLevel.coerce(True)
+
+
+# ===========================================================================
+# Pre-merge review corrections (v0.7.0) — items 1-6, 10
+# ===========================================================================
+
+
+class _FailingStore:
+    """AmendmentStore whose record() always raises (durable-write failure)."""
+
+    def __init__(self) -> None:
+        self._records: list = []
+
+    def record(self, record: dict) -> None:
+        raise RuntimeError("simulated ledger write failure (disk full)")
+
+    def all(self) -> list:
+        return list(self._records)
+
+
+# --- Item 1: changes payload secrets are scrubbed in the stored record ------
+
+def test_item1_changes_secret_redacted_in_record_but_change_applied():
+    c = _c()
+    secret_api = "sk-SUPERSECRET-abc123-DONOTLOG"
+    secret_pw = "hunter2-PLAINTEXT-DONOTLOG"
+    changes = {
+        "gates": {"epistemic": {"hold_threshold": 0.65, "api_key": secret_api}},
+        "org": {"password": secret_pw},
+    }
+    aid = _propose(c, changes=changes)
+    assert c.ratify_amendment(aid, ratified_by="ratifier-1") is True
+
+    rec = _last(c)
+    # Stored/audit copy is redacted.
+    assert rec["changes"]["gates"]["epistemic"]["api_key"] == "[REDACTED]"
+    assert rec["changes"]["org"]["password"] == "[REDACTED]"
+    # Non-secret values preserved.
+    assert rec["changes"]["gates"]["epistemic"]["hold_threshold"] == 0.65
+    # Raw secret strings appear NOWHERE in the serialized records.
+    blob = json.dumps(c.amendment_records)
+    assert secret_api not in blob
+    assert secret_pw not in blob
+    # amendment.decision copy is also redacted.
+    dec = c.amendment_log[-1]["decision"]
+    assert dec["changes"]["gates"]["epistemic"]["api_key"] == "[REDACTED]"
+    # The change was STILL applied to the live config (secret intact in-memory).
+    assert c._config["gates"]["epistemic"]["hold_threshold"] == 0.65
+    assert c._config["gates"]["epistemic"]["api_key"] == secret_api
+
+
+def test_item1_redact_secrets_public_helper():
+    out = redact_secrets({"a": 1, "token": "t", "nested": {"secret": "s", "ok": 2}})
+    assert out == {"a": 1, "token": "[REDACTED]", "nested": {"secret": "[REDACTED]", "ok": 2}}
+
+
+# --- Item 2: persistence atomic with enforcement ----------------------------
+
+def test_item2_ledger_write_failure_rolls_back_ratification():
+    c = _c(amendment_store=_FailingStore())
+    aid = _propose(c, changes=_ORDINARY_CHANGE)
+    assert c.constitution_version == 0
+    with pytest.raises(RuntimeError):
+        c.ratify_amendment(aid, ratified_by="ratifier-1")
+    # Nothing changed: version, status, config all as before the call.
+    assert c.constitution_version == 0
+    amendment = next(a for a in c._amendments if a.id == aid)
+    assert amendment.status == "PENDING"
+    assert amendment.ratified_at is None
+    assert amendment.ratified_by is None
+    assert amendment.decision is None
+    # Change was NOT applied.
+    applied = c._config.get("gates", {}).get("epistemic", {}).get("hold_threshold")
+    assert applied != 0.65
+
+
+# --- Item 3: monotonic version survives restart -----------------------------
+
+def test_item3_version_restored_across_simulated_restart(tmp_path):
+    dbfile = str(tmp_path / "amendments.db")
+    store_a = SqliteAmendmentStore(dbfile)
+    a = Constitution(config={}, authority_registry=dict(REGISTRY), amendment_store=store_a)
+    aid = a.propose_amendment(
+        description="t", rationale="r", affected_sections=["EpistemicGate"],
+        proposed_by="proposer-1", changes={"gates": {"epistemic": {"hold_threshold": 0.65}}},
+    )
+    assert a.ratify_amendment(aid, ratified_by="ratifier-1") is True
+    assert a.constitution_version == 1
+    store_a.close()
+
+    # New Constitution on the SAME store file -> version restored.
+    store_b = SqliteAmendmentStore(dbfile)
+    b = Constitution(config={}, authority_registry=dict(REGISTRY), amendment_store=store_b)
+    assert b.constitution_version == 1
+    bid = b.propose_amendment(
+        description="t2", rationale="r", affected_sections=["EpistemicGate"],
+        proposed_by="proposer-1", changes={"gates": {"epistemic": {"hold_threshold": 0.66}}},
+    )
+    assert b.ratify_amendment(bid, ratified_by="ratifier-1") is True
+    assert b.constitution_version == 2  # monotonic across the restart
+    store_b.close()
+
+
+# --- Item 4: rejected proposals are terminal (not replayable) ---------------
+
+def test_item4_rejected_amendment_is_terminal_and_not_replayable():
+    c = _c()
+    aid = _propose(c, proposer="root-a")  # proposer == ratifier below
+    assert c.ratify_amendment(aid, ratified_by="root-a") is False
+    amendment = next(a for a in c._amendments if a.id == aid)
+    assert amendment.status == "REJECTED"
+    records_after_first = len(c.amendment_records)
+    version_after_first = c.constitution_version
+
+    # Re-ratify the same id with a VALID different authority -> still False,
+    # because the proposal is no longer PENDING. No replay.
+    assert c.ratify_amendment(aid, ratified_by="root-b") is False
+    assert len(c.amendment_records) == records_after_first
+    assert c.constitution_version == version_after_first
+
+
+# --- Item 5: empty / colliding principal ids validated ----------------------
+
+def test_item5_empty_principal_id_rejected():
+    with pytest.raises(ValueError):
+        AuthorityRegistry({"": "RATIFIER", "root": "CONSTITUTIONAL_AUTHORITY"})
+
+
+def test_item5_whitespace_principal_id_rejected():
+    with pytest.raises(ValueError):
+        AuthorityRegistry({"   ": "RATIFIER", "root": "CONSTITUTIONAL_AUTHORITY"})
+
+
+def test_item5_canonical_collision_conflicting_levels_rejected():
+    with pytest.raises(ValueError):
+        AuthorityRegistry({"Alice": "RATIFIER", "alice": "CONSTITUTIONAL_AUTHORITY"})
+
+
+def test_item5_canonical_collision_same_level_allowed():
+    reg = AuthorityRegistry({
+        "Alice": "RATIFIER", "alice": "RATIFIER",
+        "root": "CONSTITUTIONAL_AUTHORITY",
+    })
+    assert reg.level_of("alice") == AuthorityLevel.RATIFIER
+    assert len(reg) == 2  # Alice/alice collapse to one principal
+
+
+def test_item5_with_changes_rejects_empty_id():
+    reg = AuthorityRegistry({"root": "CONSTITUTIONAL_AUTHORITY"})
+    with pytest.raises(ValueError):
+        reg.with_changes({"  ": "RATIFIER"})
+
+
+# --- Item 6: bounded_verifier + timeout wording -----------------------------
+
+def test_item6_bounded_verifier_fast_true():
+    v = bounded_verifier(lambda pid, ai: True, 1.0)
+    assert v("svc", None) is True
+
+
+def test_item6_bounded_verifier_raising_fails_closed():
+    def boom(pid, ai):
+        raise RuntimeError("verifier exploded")
+    assert bounded_verifier(boom, 1.0)("svc", None) is False
+
+
+def test_item6_bounded_verifier_nonbool_true_fails_closed():
+    # Truthy non-bool (e.g. 1) must NOT authenticate.
+    assert bounded_verifier(lambda pid, ai: 1, 1.0)("svc", None) is False
+
+
+def test_item6_bounded_verifier_timeout_fails_closed_promptly():
+    import time
+
+    def slow(pid, ai):
+        time.sleep(2.0)
+        return True
+
+    start = time.monotonic()
+    result = bounded_verifier(slow, 0.1)("svc", None)
+    elapsed = time.monotonic() - start
+    assert result is False
+    assert elapsed < 1.5  # returned promptly, did not wait for the 2s sleep
+
+
+def test_item6_bounded_verifier_integrates_with_identity_verifier():
+    slow_ok = bounded_verifier(lambda pid, ai: True, 1.0)
+    c = _c(identity_verifier=IdentityVerifier(name="bounded", verify=slow_ok))
+    aid = _propose(c, changes=_ORDINARY_CHANGE)
+    assert c.ratify_amendment(aid, ratified_by="ratifier-1") is True
+    assert _last(c)["identity_assurance"] == "externally_verified"
+
+
+def test_item6_timeout_wording_does_not_overclaim():
+    assert "cannot" in IdentityVerifier.__doc__.lower()
+    assert "best-effort" in bounded_verifier.__doc__.lower()
+
+
+# --- Item 10: reference-defaults wording (no "production-validated") ---------
+
+def test_item10_reference_defaults_wording():
+    doc = Constitution.from_defaults.__doc__ or ""
+    assert "production-validated" not in doc
+    assert "reference defaults" in doc.lower()

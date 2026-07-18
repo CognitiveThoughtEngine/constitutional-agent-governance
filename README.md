@@ -516,7 +516,7 @@ Load from a `governance.yaml` file:
 constitution = Constitution.load("governance.yaml")
 ```
 
-Or use production-validated defaults:
+Or use reference defaults derived from HRAO-E (deployment validation required):
 
 ```python
 constitution = Constitution.from_defaults()

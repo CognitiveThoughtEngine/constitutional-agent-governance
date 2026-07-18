@@ -56,11 +56,14 @@ from constitutional_agent.authority import (
     IdentityVerifier,
     InMemoryAmendmentStore,
     SqliteAmendmentStore,
+    bounded_verifier,
     canonical_principal,
+    redact_secrets,
     scrub_evidence,
 )
 from constitutional_agent.constitution import Constitution, ConstitutionalViolation
 from constitutional_agent.fria import (
+    Article27Applicability,
     Article27Crosswalk,
     Article27Element,
     EvidenceSource,
@@ -136,11 +139,14 @@ __all__ = [
     "SqliteAmendmentStore",
     "canonical_principal",
     "scrub_evidence",
+    "redact_secrets",
+    "bounded_verifier",
     # FRIA-support: internal evidence + Article 27(1) crosswalk (v0.7.0)
     "GovernanceEvidenceCategory",
     "FRIAEvidence",
     "Article27Element",
     "Article27Crosswalk",
+    "Article27Applicability",
     "EvidenceSource",
     "LegalReviewStatus",
     "generate_fria_evidence",

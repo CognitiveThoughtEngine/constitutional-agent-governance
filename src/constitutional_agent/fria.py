@@ -371,6 +371,36 @@ class LegalReviewStatus(Enum):
     REVIEWED = "reviewed"
 
 
+class Article27Applicability(Enum):
+    """
+    Whether EU AI Act Article 27 even applies to this deployment.
+
+    Article 27's FRIA obligation is NOT universal: it binds only specific
+    deployers of specific high-risk AI systems (public bodies / entities
+    providing public services, and deployers of the Annex III high-risk systems
+    named in Article 27(1); see EU AI Act Article 27(1)). A populated crosswalk
+    (six elements with evidence) says nothing about whether the obligation is
+    triggered at all — applicability is a deployer/legal determination, defaulting
+    to ``not_assessed`` until made.
+    """
+    NOT_ASSESSED = "not_assessed"
+    IN_SCOPE = "in_scope"
+    OUT_OF_SCOPE = "out_of_scope"
+    LEGAL_REVIEW_REQUIRED = "legal_review_required"
+
+
+def _coerce_applicability(value: Any) -> Article27Applicability:
+    """Coerce a str / Article27Applicability into the enum (default NOT_ASSESSED)."""
+    if isinstance(value, Article27Applicability):
+        return value
+    if isinstance(value, str):
+        key = value.strip().lower()
+        for member in Article27Applicability:
+            if member.value == key or member.name.lower() == key:
+                return member
+    return Article27Applicability.NOT_ASSESSED
+
+
 # Which Article 27(1) elements the framework can auto-derive operational evidence
 # for, and which strictly require deployer-supplied context. Operational gate
 # telemetry CANNOT establish intended use, duration/frequency, affected groups,
@@ -660,6 +690,12 @@ def fria_support_package(
     evidence = generate_fria_evidence(gate_results, hc_violations)
     crosswalk = generate_article27_crosswalk(gate_results, hc_violations, deployer_context)
 
+    # Whether Article 27 applies at all is a deployer/legal determination — NOT
+    # implied by having six populated crosswalk elements. Article 27's FRIA
+    # obligation binds only specified deployers of specified high-risk AI systems
+    # (EU AI Act Article 27(1)); default to NOT_ASSESSED until decided.
+    applicability = _coerce_applicability((deployer_context or {}).get("applicability"))
+
     by_source: dict[str, int] = {s.value: 0 for s in EvidenceSource}
     reviewed = 0
     for cw in crosswalk:
@@ -674,15 +710,21 @@ def fria_support_package(
             "Act Article 27 Fundamental Rights Impact Assessment. It is NOT a "
             "complete or legally sufficient FRIA. Elements requiring deployer "
             "context and legal review are marked as such in the Article 27(1) "
-            "crosswalk."
+            "crosswalk. Whether Article 27 applies to this deployment at all is a "
+            "deployer/legal determination — see 'article_27_applicability'."
         ),
+        "article_27_applicability": applicability.value,
         "internal_governance_evidence": fria_summary(evidence),
         "article_27_1_crosswalk": [cw.to_dict() for cw in crosswalk],
         "article_27_1_readiness": {
             "elements_total": len(crosswalk),
             "by_source": by_source,
             "legally_reviewed": reviewed,
-            "complete": (
+            # All six crosswalk fields present (non-MISSING) AND legally reviewed.
+            # This is NOT a claim that the FRIA is finished or legally sufficient
+            # (nor that Article 27 even applies — see 'article_27_applicability');
+            # it only reports crosswalk-field readiness.
+            "crosswalk_fields_present_and_reviewed": (
                 by_source[EvidenceSource.MISSING.value] == 0
                 and reviewed == len(crosswalk)
             ),

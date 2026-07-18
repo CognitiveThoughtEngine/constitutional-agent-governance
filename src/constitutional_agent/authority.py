@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
@@ -48,6 +49,8 @@ __all__ = [
     "InMemoryAmendmentStore",
     "SqliteAmendmentStore",
     "scrub_evidence",
+    "redact_secrets",
+    "bounded_verifier",
     "canonical_principal",
 ]
 
@@ -145,7 +148,30 @@ class AuthorityRegistry:
         for pid, level in (mapping or {}).items():
             if level is None:
                 continue
-            self._levels[canonical_principal(pid)] = AuthorityLevel.coerce(level)
+            canonical = canonical_principal(pid)
+            # An empty/whitespace-only id has no stable identity to authorize
+            # against — reject it rather than register an anonymous principal.
+            if canonical == "":
+                raise ValueError(
+                    f"authority_registry principal id {pid!r} is empty or "
+                    "whitespace-only after canonicalization; principal ids must "
+                    "be non-empty, stable identifiers."
+                )
+            coerced = AuthorityLevel.coerce(level)
+            # Two distinct raw ids that canonicalize to the SAME key with
+            # DIFFERENT levels is a silent-overwrite hazard (last one wins, and
+            # the other principal's intended level is lost). Reject the
+            # collision so the deployer resolves it explicitly. An identical
+            # canonical id at the SAME level is harmless and allowed.
+            existing = self._levels.get(canonical)
+            if existing is not None and existing != coerced:
+                raise ValueError(
+                    f"authority_registry collision: id {pid!r} canonicalizes to "
+                    f"'{canonical}', which is already registered at a different "
+                    f"level ({existing.name} vs {coerced.name}). Distinct raw ids "
+                    "that resolve to the same principal must agree on level."
+                )
+            self._levels[canonical] = coerced
         # A registry that ships with zero root authorities cannot authorize the
         # very changes (hard constraints / registry) it is meant to gate. That is
         # a fail-closed dead end; reject it at construction so the deployer fixes
@@ -197,6 +223,13 @@ class AuthorityRegistry:
         }
         for pid, level in changes.items():
             spid = canonical_principal(pid)
+            # Reject empty/whitespace-only ids here too — a registry amendment
+            # must not be able to introduce an anonymous principal.
+            if spid == "" and level is not None:
+                raise ValueError(
+                    f"authority_registry change references principal id {pid!r} "
+                    "that is empty or whitespace-only after canonicalization."
+                )
             if level is None:
                 merged.pop(spid, None)
             else:
@@ -236,6 +269,14 @@ class IdentityVerifier:
     The verifier may only *add* restriction. It cannot bypass separation-of-duty
     or authority-level rules: those are checked independently and a passing
     callback never overrides a policy rejection.
+
+    **Timeout / hang.** The constitution fails closed only when ``verify``
+    returns something other than exactly ``True`` or raises. It CANNOT interrupt
+    a callback that blocks or hangs — Python cannot preempt a running call. If
+    your verifier makes a network call, IT must enforce its own wall-clock
+    timeout (and raise/return False on expiry). :func:`bounded_verifier` wraps a
+    verify callable to bound the *caller's wait* and fail closed on timeout, but
+    even it cannot kill the underlying worker thread — it is best-effort.
     """
 
     name: str
@@ -269,6 +310,69 @@ def _redact(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_redact(v) for v in value]
     return value
+
+
+def redact_secrets(obj: Any) -> Any:
+    """
+    Return a deep copy of ``obj`` with secret-shaped keys redacted.
+
+    Recurses through nested dicts/lists and replaces the value of any key whose
+    name looks like a secret (``password``, ``api_key``, ``token``, ...) with
+    ``"[REDACTED]"``. Non-secret values are preserved. The input is never
+    mutated. Use this before persisting any structure that may embed
+    credentials — for example the ``changes`` payload of an amendment record.
+
+    This is the public entry point to the same redaction logic
+    :func:`scrub_evidence` applies to the ``evidence`` field.
+    """
+    return _redact(obj)
+
+
+def bounded_verifier(
+    verify: Callable[[str, Optional[dict[str, Any]]], Any],
+    timeout_seconds: float,
+    *,
+    name: Optional[str] = None,
+) -> Callable[[str, Optional[dict[str, Any]]], bool]:
+    """
+    Wrap a verify callable so the caller waits at most ``timeout_seconds``.
+
+    Returns a new ``verify(principal_id, asserted_identity) -> bool`` that runs
+    the wrapped callable on a worker thread and waits for its result with a
+    wall-clock timeout. It fails **closed** — returning ``False`` — when the
+    wrapped call times out or raises ANY exception, and returns ``True`` only
+    when the wrapped call returns exactly ``True`` (any other value → ``False``).
+
+    **Best-effort.** This bounds the *caller's wait*, not the wrapped call: on
+    timeout the worker thread is NOT killed (Python cannot preempt it) and may
+    keep running in the background. Use it to stop a hung IdP call from stalling
+    ratification indefinitely — not as a hard resource bound. Prefer a verifier
+    that enforces its own timeout at the I/O layer where possible.
+
+        verifier = IdentityVerifier(
+            name="entra",
+            verify=bounded_verifier(my_entra_check, timeout_seconds=5.0),
+        )
+    """
+
+    def _bounded(principal_id: str, asserted_identity: Optional[dict[str, Any]]) -> bool:
+        executor = ThreadPoolExecutor(max_workers=1)
+        try:
+            future = executor.submit(verify, principal_id, asserted_identity)
+            try:
+                result = future.result(timeout=timeout_seconds)
+            except FutureTimeoutError:
+                return False  # fail-closed: caller waited long enough
+            except Exception:
+                return False  # fail-closed on any verifier error
+            return result is True
+        finally:
+            # Do not block on a still-running worker thread; release promptly.
+            executor.shutdown(wait=False)
+
+    if name is not None:
+        _bounded.__name__ = f"bounded_verifier[{name}]"
+    return _bounded
 
 
 def scrub_evidence(

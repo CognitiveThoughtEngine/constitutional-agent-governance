@@ -84,11 +84,57 @@ reconciled to figures traceable to this repository.
 - "Cited in NIST AI 800-2 submissions" → "informed three public-comment
   submissions concerning NIST AI 800-2 (CAISI acknowledged receipt)."
 
+### Changed — Pre-merge review corrections (10 items)
+
+Applied before merge in response to review; version stays **0.7.0**.
+
+1. **Secret-scrub the stored `changes` payload.** `AmendmentRecord.changes` (the
+   durable/audit copy and `amendment.decision`) is now redacted via the new
+   public `authority.redact_secrets()` helper — secret-shaped config values are
+   never persisted. The live `changes` used to apply the amendment is untouched.
+2. **Atomic ledger + enforcement.** The ratified path snapshots state and version
+   before applying; if applying the change **or** the durable store write raises,
+   it rolls back state, version, and the amendment lifecycle fields and re-raises
+   — a ledger-write failure leaves the system exactly as before the call.
+3. **Monotonic version survives restart.** `constitution_version` is reconstructed
+   at construction from the max version across persisted RATIFIED records
+   (`_reconstruct_version`), so it resumes across a process restart with a durable
+   store instead of resetting to 0.
+4. **Rejected proposals are terminal (BREAKING).** A rejected ratification now sets
+   `status = "REJECTED"` (was left `PENDING`), so it can no longer be re-ratified /
+   replayed. A fresh attempt requires a new proposal id.
+5. **Registry id validation.** `AuthorityRegistry` now rejects empty/whitespace-only
+   principal ids and canonical collisions that map to **different** levels (an
+   identical-level duplicate is still allowed); the same empty-id guard applies to
+   `with_changes`.
+6. **Callback-timeout honesty + `bounded_verifier`.** Docs corrected: the library
+   fails closed only when the verifier returns non-`True` or raises, and cannot
+   interrupt a blocking callback. Added `authority.bounded_verifier(verify,
+   timeout_seconds, *, name=...)` (best-effort: bounds the caller's wait via a
+   thread + `future.result(timeout=...)`, fails closed on timeout/exception).
+7. **Concurrency scope documented.** Docstrings now state the atomicity /
+   last-authority guarantee is **instance-local** (one Constitution instance, one
+   process); cross-process ratification needs a durable compare-and-swap in the
+   store (deployer responsibility).
+8. **FRIA readiness key renamed.** `article_27_1_readiness.complete` →
+   `crosswalk_fields_present_and_reviewed` (same boolean meaning) so no key implies
+   a finished/legally-sufficient FRIA.
+9. **Article 27 applicability status.** New `Article27Applicability` enum
+   (`not_assessed` default / `in_scope` / `out_of_scope` / `legal_review_required`);
+   `fria_support_package` now includes a top-level `article_27_applicability`. Six
+   populated elements do not imply the obligation applies.
+10. **Reference-defaults wording.** "production-validated thresholds/defaults"
+    replaced everywhere (code + docs) with "reference defaults derived from HRAO-E;
+    deployment validation required."
+
+New exports: `redact_secrets`, `bounded_verifier`, `Article27Applicability`.
+
 ### Tests
 
-- +44 tests: `test_amendment_authority.py` (34 functions covering every
-  enforcement path + the eight reviewer edge cases) and `test_fria_article27.py`
-  (10). Full suite: **223 passing**.
+- +44 tests: `test_amendment_authority.py` (enforcement paths + reviewer edge
+  cases) and `test_fria_article27.py`. Pre-merge corrections add **+21** regression
+  tests (17 in `test_amendment_authority.py`, 4 in `test_fria_article27.py`).
+  Full suite: **244 passing**.
 
 ---
 
@@ -255,8 +301,9 @@ No breaking changes from v0.4.0b3. Promoting from beta to stable after validatio
 
 - **`__init__` on all six gate classes** — `EpistemicGate`, `RiskGate`,
   `GovernanceGate`, `EconomicGate`, `AutonomyGate`, and `ConstitutionalGate`
-  now accept keyword-only threshold arguments. All default to production-validated
-  values. Fully backwards-compatible — existing code using `EpistemicGate()`
+  now accept keyword-only threshold arguments. All default to reference defaults
+  derived from HRAO-E (deployment validation required). Fully backwards-compatible
+  — existing code using `EpistemicGate()`
   with no arguments continues to work unchanged.
 
 - **Issue templates** — three structured templates for GitHub issues: bug report

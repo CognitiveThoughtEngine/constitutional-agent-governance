@@ -56,6 +56,7 @@ from constitutional_agent.authority import (
     IdentityVerifier,
     InMemoryAmendmentStore,
     canonical_principal,
+    redact_secrets,
     scrub_evidence,
 )
 from constitutional_agent.hard_constraints import (
@@ -277,12 +278,21 @@ class Constitution:
         self._amendment_store: AmendmentStore = (
             amendment_store if amendment_store is not None else InMemoryAmendmentStore()
         )
-        self._constitution_version = 0
+        # Restore the monotonic version from the durable store so it survives a
+        # process restart (a fresh InMemoryAmendmentStore yields 0). Without this
+        # a restarted process would reset to 0 and re-mint versions that collide
+        # with already-persisted records.
+        self._constitution_version = self._reconstruct_version()
         # Serializes ratification so the check-then-apply of the last-authority
-        # guard (and version bump) is atomic under concurrent ratifiers. Without
-        # it, two interleaved amendments could each pass a guard evaluated against
-        # a stale registry and together strand the system with zero root
-        # authorities. Reentrant so nested internal calls do not deadlock.
+        # guard (and version bump) is atomic under concurrent ratifiers WITHIN
+        # ONE Constitution instance in ONE process. Without it, two interleaved
+        # ratifiers could each pass a guard evaluated against a stale registry
+        # and together strand the system with zero root authorities. Reentrant so
+        # nested internal calls do not deadlock. NOTE: this lock is instance-
+        # local — it does NOT coordinate multiple Constitution instances or
+        # multiple processes sharing one durable store. Cross-process ratification
+        # requires a durable compare-and-swap / transaction in the store and is
+        # the deployer's responsibility (out of scope for this library).
         self._ratify_lock = threading.RLock()
 
     @classmethod
@@ -326,8 +336,8 @@ class Constitution:
         """
         Create a Constitution with default built-in configuration.
 
-        Uses all six gates with production-validated thresholds from the
-        HRAO-E Constitutional Framework. Suitable for getting started
+        Uses all six gates with reference defaults derived from HRAO-E;
+        deployment validation required. Suitable for getting started
         without a governance.yaml file.
 
         Returns:
@@ -543,6 +553,13 @@ class Constitution:
         identity. Supply ``identity_verifier`` (see ``Constitution.__init__``) to
         bind the asserted principal to Entra / Okta / IAM / mTLS / a signed token.
 
+        **Concurrency scope.** The atomicity and last-authority guarantees are
+        **instance-local**: they hold across concurrent ratifiers sharing a
+        single Constitution instance within one process. They do NOT protect
+        multiple Constitution instances or multiple processes sharing one durable
+        store — cross-process ratification requires a durable compare-and-swap /
+        transaction in the store and is the deployer's responsibility.
+
         Args:
             amendment_id:      ID returned by ``propose_amendment()``.
             ratified_by:       The ratifier's opaque, stable ``principal_id``.
@@ -579,6 +596,12 @@ class Constitution:
         the registry it simulates against is the one it will actually mutate, so
         interleaved ratifiers cannot together drop the system below one root
         authority.
+
+        **Scope: instance-local.** ``_ratify_lock`` only serializes ratifiers
+        that share THIS Constitution instance in THIS process. It does not
+        coordinate separate Constitution instances or separate processes sharing
+        one durable store — for that, the deployer must provide a durable
+        compare-and-swap / transaction in the store (out of scope here).
         """
         amendment = next(
             (a for a in self._amendments
@@ -665,7 +688,12 @@ class Constitution:
                 # fails closed rather than being coerced to a pass.
                 verified = raw is True
             except Exception:
-                verified = False  # fail-closed on callback error / timeout
+                # Fail-closed when the verifier RAISES (including a TimeoutError
+                # it raises itself). NOTE: this cannot interrupt a callback that
+                # blocks/hangs — Python cannot preempt a running call. A verifier
+                # that may block must enforce its own wall-clock timeout (see
+                # authority.bounded_verifier, best-effort).
+                verified = False
             if verified:
                 identity_assurance = "externally_verified"
                 identity_verifier_name = self._identity_verifier.name
@@ -680,6 +708,10 @@ class Constitution:
 
         # --- Rejection path -------------------------------------------------
         if reject is not None:
+            # PENDING -> REJECTED is terminal. A rejected proposal must NOT stay
+            # PENDING — otherwise the same id could be re-submitted to ratify and
+            # replayed. A fresh attempt requires a new proposal with a new id.
+            amendment.status = "REJECTED"
             self._finalize_amendment(
                 amendment,
                 outcome="REJECTED",
@@ -699,43 +731,58 @@ class Constitution:
             )
             return False
 
-        # --- Apply changes atomically (rollback on error) -------------------
-        if amendment.changes:
-            backup = self._snapshot_state()
-            try:
+        # --- Apply changes AND persist the ledger record atomically ---------
+        # Capture the exact governing state and version BEFORE any mutation. If
+        # applying the change OR writing the durable ledger record raises, we
+        # restore the system to precisely its pre-ratify state: no live
+        # governance change is ever left without durable evidence, and no
+        # half-applied change survives a store-write failure. Net: a failed
+        # ratify leaves the system exactly as it was before the call.
+        prior_version = self._constitution_version
+        backup = self._snapshot_state()
+        try:
+            if amendment.changes:
                 self._apply_amendment_changes(amendment.changes)
-            except Exception:
-                self._restore_state(backup)
-                raise
 
-        # Bump monotonic version only after changes succeed.
-        self._constitution_version += 1
-        amendment.status = "RATIFIED"
-        amendment.ratified_at = datetime.now(timezone.utc).isoformat()
-        amendment.ratified_by = ratifier_id
-        hash_after = self._constitution_hash()
+            # Bump monotonic version only after changes succeed.
+            self._constitution_version += 1
+            amendment.status = "RATIFIED"
+            amendment.ratified_at = datetime.now(timezone.utc).isoformat()
+            amendment.ratified_by = ratifier_id
+            hash_after = self._constitution_hash()
 
-        self._finalize_amendment(
-            amendment,
-            outcome="RATIFIED",
-            ratifier_id=ratifier_id,
-            proposer_level=proposer_level,
-            ratifier_level=ratifier_level,
-            required=required,
-            affected_paths=affected_paths,
-            identity_assurance=identity_assurance,
-            identity_verifier_name=identity_verifier_name,
-            scrubbed_evidence=scrubbed_evidence,
-            evidence_hash=evidence_hash,
-            hash_before=hash_before,
-            hash_after=hash_after,
-            version=self._constitution_version,
-            reason=(
-                f"Ratified by '{ratifier_id}' "
-                f"({ratifier_level.name if ratifier_level else 'unregistered'}); "
-                f"required {required.name}; identity {identity_assurance}."
-            ),
-        )
+            self._finalize_amendment(
+                amendment,
+                outcome="RATIFIED",
+                ratifier_id=ratifier_id,
+                proposer_level=proposer_level,
+                ratifier_level=ratifier_level,
+                required=required,
+                affected_paths=affected_paths,
+                identity_assurance=identity_assurance,
+                identity_verifier_name=identity_verifier_name,
+                scrubbed_evidence=scrubbed_evidence,
+                evidence_hash=evidence_hash,
+                hash_before=hash_before,
+                hash_after=hash_after,
+                version=self._constitution_version,
+                reason=(
+                    f"Ratified by '{ratifier_id}' "
+                    f"({ratifier_level.name if ratifier_level else 'unregistered'}); "
+                    f"required {required.name}; identity {identity_assurance}."
+                ),
+            )
+        except Exception:
+            # Roll back state, version, and the amendment lifecycle fields so a
+            # ledger-write (or apply) failure is fully undone and the proposal
+            # stays PENDING for a later retry.
+            self._restore_state(backup)
+            self._constitution_version = prior_version
+            amendment.status = "PENDING"
+            amendment.ratified_at = None
+            amendment.ratified_by = None
+            amendment.decision = None
+            raise
 
         if self._on_amendment_ratified is not None:
             self._on_amendment_ratified(amendment.to_dict())
@@ -756,9 +803,43 @@ class Constitution:
         """
         return self._amendment_store.all()
 
+    def _reconstruct_version(self) -> int:
+        """
+        Reconstruct the monotonic version from the durable amendment store.
+
+        Returns the maximum ``constitution_version`` across all persisted
+        RATIFIED records (0 if none / empty store). This makes the version
+        survive a process restart when a durable store is configured: a new
+        Constitution built on the same store resumes where the last one left
+        off. A best-effort read — any store error falls back to 0 (fail-open on
+        the *version counter only*; the ledger itself remains the source of
+        truth).
+        """
+        try:
+            records = self._amendment_store.all()
+        except Exception:
+            return 0
+        best = 0
+        for rec in records or []:
+            if str(rec.get("outcome", "")).upper() != "RATIFIED":
+                continue
+            try:
+                v = int(rec.get("constitution_version", 0))
+            except (TypeError, ValueError):
+                continue
+            if v > best:
+                best = v
+        return best
+
     @property
     def constitution_version(self) -> int:
-        """Monotonic version, incremented on each successful ratification."""
+        """Monotonic version, incremented on each successful ratification.
+
+        Restored from the durable amendment store at construction (the max
+        version across persisted RATIFIED records), so it survives process
+        restarts when a durable store (e.g. ``SqliteAmendmentStore``) is
+        configured; with the default in-memory store it starts at 0.
+        """
         return self._constitution_version
 
     @property
@@ -928,7 +1009,12 @@ class Constitution:
             constitution_version=version,
             reason=reason,
             description=amendment.description,
-            changes=amendment.changes,
+            # Redact secret-shaped values from the STORED/audit copy of the
+            # change payload. The live ``amendment.changes`` used by
+            # ``_apply_amendment_changes`` is left intact — only this durable
+            # record (and ``amendment.decision``) is redacted, so credentials
+            # embedded in a config change never persist to the ledger.
+            changes=redact_secrets(amendment.changes),
         )
         amendment.decision = record.to_dict()
         self._amendment_store.record(record.to_dict())
@@ -1034,8 +1120,9 @@ class Constitution:
         Build a SixGateEvaluator from governance.yaml config.
 
         Applies YAML-configured threshold overrides per gate. Missing keys
-        fall back to production-validated defaults. All threshold overrides
-        are additive — you only need to specify values you want to change.
+        fall back to reference defaults derived from HRAO-E (deployment
+        validation required). All threshold overrides are additive — you only
+        need to specify values you want to change.
 
         Gates with ``enabled: false`` in the YAML are replaced with a
         _DisabledGate stub that always returns PASS, so they never block
