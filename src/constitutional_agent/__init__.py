@@ -61,7 +61,11 @@ from constitutional_agent.authority import (
     redact_secrets,
     scrub_evidence,
 )
-from constitutional_agent.constitution import Constitution, ConstitutionalViolation
+from constitutional_agent.constitution import (
+    Constitution,
+    ConstitutionalViolation,
+    ConstitutionIntegrityError,
+)
 from constitutional_agent.fria import (
     Article27Applicability,
     Article27Crosswalk,
@@ -106,6 +110,7 @@ __all__ = [
     # Constitution — primary entry point
     "Constitution",
     "ConstitutionalViolation",
+    "ConstitutionIntegrityError",
     # Gates — individual gate classes
     "SixGateEvaluator",
     "EpistemicGate",

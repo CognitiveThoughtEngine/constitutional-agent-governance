@@ -366,6 +366,16 @@ protocol — all checks fail-closed:
   version, and evidence retained scrubbed + by SHA-256 hash. Credentials, tokens,
   and secrets are never stored.
 
+> **Restart recovery is version-only.** With a durable store, a new
+> `Constitution` reconstructs the **monotonic version counter** from the ledger —
+> fail-closed: an unreadable store or a malformed RATIFIED record raises
+> `ConstitutionIntegrityError` rather than reset to 0 and risk reissuing an
+> existing version number. It does **not** restore the governing configuration,
+> authority registry, hard constraints, or pending proposals. Reload that governed
+> state from its own source and verify it against the last record's
+> `constitution_hash_after`; do not assume the amendment store recovers the full
+> constitution.
+
 > **Trust boundary.** The library authorizes a *registered* principal according to
 > constitutional policy. It does **not** prove the caller controls that identity.
 > Deployers can supply an authentication callback (`IdentityVerifier`) to bind the

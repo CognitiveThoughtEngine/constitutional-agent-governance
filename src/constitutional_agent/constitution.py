@@ -113,6 +113,18 @@ class ConstitutionalViolation(Exception):
         )
 
 
+class ConstitutionIntegrityError(Exception):
+    """
+    Raised when the durable amendment ledger cannot be trusted for a safety-
+    critical reconstruction — e.g. a *configured* store is unreadable, or a
+    persisted RATIFIED record is internally inconsistent (a malformed version).
+
+    Deliberately fail-CLOSED: rather than silently reset the monotonic version
+    counter to 0 (which could reissue existing version numbers), the Constitution
+    refuses to start until the ledger is repaired or replaced.
+    """
+
+
 class AmendmentProposal:
     """
     A proposed constitutional amendment.
@@ -708,27 +720,38 @@ class Constitution:
 
         # --- Rejection path -------------------------------------------------
         if reject is not None:
-            # PENDING -> REJECTED is terminal. A rejected proposal must NOT stay
-            # PENDING — otherwise the same id could be re-submitted to ratify and
-            # replayed. A fresh attempt requires a new proposal with a new id.
+            # PENDING -> REJECTED is terminal, but the transition is only durable
+            # once the decision record is persisted. Mirror the ratified path's
+            # atomic-rollback discipline: if _finalize_amendment (the ledger write)
+            # raises, undo the in-memory terminal transition so the proposal stays
+            # PENDING for a later retry. A rejected proposal must never be terminal
+            # in memory with no durable decision record. (Nothing governing changes
+            # on rejection, so only the amendment lifecycle fields need restoring.)
+            prior_status = amendment.status
+            prior_decision = amendment.decision
             amendment.status = "REJECTED"
-            self._finalize_amendment(
-                amendment,
-                outcome="REJECTED",
-                ratifier_id=ratifier_id,
-                proposer_level=proposer_level,
-                ratifier_level=ratifier_level,
-                required=required,
-                affected_paths=affected_paths,
-                identity_assurance=identity_assurance,
-                identity_verifier_name=identity_verifier_name,
-                scrubbed_evidence=scrubbed_evidence,
-                evidence_hash=evidence_hash,
-                hash_before=hash_before,
-                hash_after=hash_before,  # nothing changed
-                version=self._constitution_version,
-                reason=reject,
-            )
+            try:
+                self._finalize_amendment(
+                    amendment,
+                    outcome="REJECTED",
+                    ratifier_id=ratifier_id,
+                    proposer_level=proposer_level,
+                    ratifier_level=ratifier_level,
+                    required=required,
+                    affected_paths=affected_paths,
+                    identity_assurance=identity_assurance,
+                    identity_verifier_name=identity_verifier_name,
+                    scrubbed_evidence=scrubbed_evidence,
+                    evidence_hash=evidence_hash,
+                    hash_before=hash_before,
+                    hash_after=hash_before,  # nothing changed
+                    version=self._constitution_version,
+                    reason=reject,
+                )
+            except Exception:
+                amendment.status = prior_status
+                amendment.decision = prior_decision
+                raise
             return False
 
         # --- Apply changes AND persist the ledger record atomically ---------
@@ -808,25 +831,46 @@ class Constitution:
         Reconstruct the monotonic version from the durable amendment store.
 
         Returns the maximum ``constitution_version`` across all persisted
-        RATIFIED records (0 if none / empty store). This makes the version
-        survive a process restart when a durable store is configured: a new
-        Constitution built on the same store resumes where the last one left
-        off. A best-effort read — any store error falls back to 0 (fail-open on
-        the *version counter only*; the ledger itself remains the source of
-        truth).
+        RATIFIED records. An empty / never-written store legitimately yields 0
+        (a fresh constitution starts at version 0), so the version survives a
+        process restart when a durable store is configured: a new Constitution
+        built on the same store resumes where the last one left off.
+
+        This is fail-CLOSED for integrity, NOT fail-open. If a *configured* store
+        is unreadable, or a persisted RATIFIED record carries a malformed
+        ``constitution_version``, this raises :class:`ConstitutionIntegrityError`
+        rather than reset the counter to 0 — resetting could reissue an existing
+        version number. A corrupt/unreadable ledger must stop startup until it is
+        repaired or replaced.
+
+        NOTE: this restores ONLY the monotonic version counter. It does NOT
+        restore the governing configuration, authority registry, hard
+        constraints, or pending proposals — those must be reloaded from their own
+        source and verified against the last ``constitution_hash_after``.
         """
         try:
             records = self._amendment_store.all()
-        except Exception:
-            return 0
+        except Exception as exc:
+            raise ConstitutionIntegrityError(
+                "Amendment store is configured but unreadable; refusing to reset "
+                "the monotonic version counter to 0 (that would risk reissuing "
+                "existing version numbers). Repair or replace the store first."
+            ) from exc
         best = 0
         for rec in records or []:
             if str(rec.get("outcome", "")).upper() != "RATIFIED":
                 continue
+            raw: Any = rec.get("constitution_version")
             try:
-                v = int(rec.get("constitution_version", 0))
-            except (TypeError, ValueError):
-                continue
+                v = int(raw)
+            except (TypeError, ValueError) as exc:
+                raise ConstitutionIntegrityError(
+                    f"RATIFIED amendment record "
+                    f"{rec.get('amendment_id', '<unknown>')!r} has a malformed "
+                    f"constitution_version ({raw!r}); the durable ledger is "
+                    "internally inconsistent. Refusing to reconstruct the version "
+                    "counter from a corrupt record."
+                ) from exc
             if v > best:
                 best = v
         return best
@@ -839,6 +883,12 @@ class Constitution:
         version across persisted RATIFIED records), so it survives process
         restarts when a durable store (e.g. ``SqliteAmendmentStore``) is
         configured; with the default in-memory store it starts at 0.
+
+        Restart recovery restores ONLY this monotonic counter — NOT the governing
+        configuration, authority registry, hard constraints, or pending
+        proposals. Deployers must reload that governed state from its own source
+        and verify it against the last record's ``constitution_hash_after``; do
+        not assume the amendment store recovers the full constitution.
         """
         return self._constitution_version
 

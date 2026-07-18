@@ -15,7 +15,7 @@ import threading
 
 import pytest
 
-from constitutional_agent import Constitution
+from constitutional_agent import Constitution, ConstitutionIntegrityError
 from constitutional_agent.authority import (
     AuthorityLevel,
     AuthorityRegistry,
@@ -711,3 +711,76 @@ def test_item10_reference_defaults_wording():
     doc = Constitution.from_defaults.__doc__ or ""
     assert "production-validated" not in doc
     assert "reference defaults" in doc.lower()
+
+
+# ---------------------------------------------------------------------------
+# PR #26 re-review: durable-store failure integrity —
+# rejection atomicity + version-reconstruction fail-closed behaviour.
+# ---------------------------------------------------------------------------
+
+
+class _RaisingRecordStore:
+    """Durable store whose write (``record``) always fails; reads work."""
+
+    def __init__(self) -> None:
+        self._records: list = []
+
+    def record(self, record: dict) -> None:
+        raise RuntimeError("simulated durable-store write failure")
+
+    def all(self) -> list:
+        return list(self._records)
+
+
+class _UnreadableStore:
+    """Configured durable store that cannot be read (``all`` raises)."""
+
+    def record(self, record: dict) -> None:  # pragma: no cover - not exercised
+        pass
+
+    def all(self) -> list:
+        raise RuntimeError("simulated unreadable durable store")
+
+
+class _MalformedVersionStore:
+    """Store returning a RATIFIED record with a non-integer version."""
+
+    def record(self, record: dict) -> None:  # pragma: no cover - not exercised
+        pass
+
+    def all(self) -> list:
+        return [
+            {
+                "amendment_id": "amd-corrupt",
+                "outcome": "RATIFIED",
+                "constitution_version": "not-an-int",
+            }
+        ]
+
+
+def test_rejection_is_atomic_when_durable_store_write_fails():
+    # A rejection whose durable decision record cannot be persisted must NOT
+    # leave the proposal terminal (REJECTED) in memory. The store error
+    # propagates and the proposal rolls back to PENDING (same discipline as the
+    # ratified path), so it can be retried against a healthy store.
+    c = _c(amendment_store=_RaisingRecordStore())
+    aid = _propose(c, proposer="root-a")
+    with pytest.raises(RuntimeError):
+        # proposer == ratifier -> separation-of-duty rejection -> record() fails
+        c.ratify_amendment(aid, ratified_by="root-a")
+    assert c.amendment_log[-1]["status"] == "PENDING"  # rolled back, not REJECTED
+
+
+def test_reconstruct_version_raises_on_unreadable_store():
+    # An unreadable *configured* store must not silently reset the version
+    # counter to 0 (which could reissue existing version numbers) — it raises.
+    with pytest.raises(ConstitutionIntegrityError):
+        _c(amendment_store=_UnreadableStore())
+
+
+def test_reconstruct_version_raises_on_malformed_ratified_record():
+    # A RATIFIED record with a malformed version is an internally inconsistent
+    # ledger; reconstruction must raise rather than skip it (skipping could lower
+    # the max and reissue a version).
+    with pytest.raises(ConstitutionIntegrityError):
+        _c(amendment_store=_MalformedVersionStore())
