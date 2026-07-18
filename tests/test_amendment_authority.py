@@ -742,8 +742,11 @@ class _UnreadableStore:
         raise RuntimeError("simulated unreadable durable store")
 
 
-class _MalformedVersionStore:
-    """Store returning a RATIFIED record with a non-integer version."""
+class _RatifiedVersionStore:
+    """Store returning a single RATIFIED record with a given version value."""
+
+    def __init__(self, version: object) -> None:
+        self._version = version
 
     def record(self, record: dict) -> None:  # pragma: no cover - not exercised
         pass
@@ -751,9 +754,9 @@ class _MalformedVersionStore:
     def all(self) -> list:
         return [
             {
-                "amendment_id": "amd-corrupt",
+                "amendment_id": "amd-x",
                 "outcome": "RATIFIED",
-                "constitution_version": "not-an-int",
+                "constitution_version": self._version,
             }
         ]
 
@@ -768,7 +771,9 @@ def test_rejection_is_atomic_when_durable_store_write_fails():
     with pytest.raises(RuntimeError):
         # proposer == ratifier -> separation-of-duty rejection -> record() fails
         c.ratify_amendment(aid, ratified_by="root-a")
-    assert c.amendment_log[-1]["status"] == "PENDING"  # rolled back, not REJECTED
+    last = c.amendment_log[-1]
+    assert last["status"] == "PENDING"  # rolled back, not terminal REJECTED
+    assert last["decision"] is None  # decision record cleared on rollback
 
 
 def test_reconstruct_version_raises_on_unreadable_store():
@@ -778,9 +783,17 @@ def test_reconstruct_version_raises_on_unreadable_store():
         _c(amendment_store=_UnreadableStore())
 
 
-def test_reconstruct_version_raises_on_malformed_ratified_record():
-    # A RATIFIED record with a malformed version is an internally inconsistent
-    # ledger; reconstruction must raise rather than skip it (skipping could lower
-    # the max and reissue a version).
+@pytest.mark.parametrize("bad_version", [True, 1.5, 0, -1, None, "not-an-int"])
+def test_reconstruct_version_rejects_malformed_ratified_version(bad_version):
+    # A RATIFIED record must carry a positive, non-boolean integer. bool / float /
+    # None / str and non-positive values are all malformed; reconstruction must
+    # raise rather than coerce or skip (either could reissue an existing version).
     with pytest.raises(ConstitutionIntegrityError):
-        _c(amendment_store=_MalformedVersionStore())
+        _c(amendment_store=_RatifiedVersionStore(bad_version))
+
+
+def test_reconstruct_version_restores_valid_positive_version():
+    # Guard against over-strict validation: a well-formed RATIFIED record
+    # reconstructs the version counter to its value.
+    c = _c(amendment_store=_RatifiedVersionStore(5))
+    assert c.constitution_version == 5

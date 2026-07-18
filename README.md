@@ -298,7 +298,7 @@ package  = constitution.fria_support_package(context, deployer_context={
 })
 
 readiness = package["article_27_1_readiness"]
-# {"elements_total": 6, "by_source": {...}, "legally_reviewed": N, "complete": bool}
+# {"elements_total": 6, "by_source": {...}, "legally_reviewed": N, "crosswalk_fields_present_and_reviewed": bool}
 # `complete` is True only when no element is missing AND all are legally reviewed.
 ```
 
@@ -363,8 +363,10 @@ protocol — all checks fail-closed:
 - **Durable, audit-grade record** for every decision (RATIFIED *and* REJECTED):
   proposer/ratifier ids + their levels, required authority, identity-assurance
   mode, actual affected paths, before/after constitution hashes, a monotonic
-  version, and evidence retained scrubbed + by SHA-256 hash. Credentials, tokens,
-  and secrets are never stored.
+  version, and evidence retained scrubbed + by SHA-256 hash. Values under
+  recognized secret-shaped keys are redacted before persistence (key-name
+  detection — it does not guarantee that a secret value placed under a generic
+  key is caught).
 
 > **Restart recovery is version-only.** With a durable store, a new
 > `Constitution` reconstructs the **monotonic version counter** from the ledger —
@@ -569,7 +571,7 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 This library is a portable extract from the HRAO-E Constitutional Framework — a production reference implementation of constitutional governance.
 
 **This library (verifiable from this repo):**
-- **218 test functions** across 6 test modules (223 collected cases), 0 failed
+- **243 test functions** across 6 test modules (253 collected cases), 0 failed
 - **12 hard constraints** (HC-1 through HC-12) enforced in code
 - **6 constitutional gates** (EG, RG, GG, EPG, AAG, CGG)
 - **Enforced amendment protocol** — separation of duties + authority levels + last-authority guard, with a durable audit record

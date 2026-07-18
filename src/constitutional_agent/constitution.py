@@ -861,18 +861,21 @@ class Constitution:
             if str(rec.get("outcome", "")).upper() != "RATIFIED":
                 continue
             raw: Any = rec.get("constitution_version")
-            try:
-                v = int(raw)
-            except (TypeError, ValueError) as exc:
+            # A RATIFIED record MUST carry a positive, non-boolean integer version.
+            # int(raw) would silently coerce malformed values (True->1, 1.5->1,
+            # "0"->0) and negatives/zero are impossible for a ratified record
+            # (ratification bumps a 0-based counter to >= 1) — any of these could
+            # mis-count the max and reissue an existing version. Reject them.
+            if not isinstance(raw, int) or isinstance(raw, bool) or raw <= 0:
                 raise ConstitutionIntegrityError(
                     f"RATIFIED amendment record "
                     f"{rec.get('amendment_id', '<unknown>')!r} has a malformed "
-                    f"constitution_version ({raw!r}); the durable ledger is "
-                    "internally inconsistent. Refusing to reconstruct the version "
-                    "counter from a corrupt record."
-                ) from exc
-            if v > best:
-                best = v
+                    f"constitution_version ({raw!r}); expected a positive integer. "
+                    "The durable ledger is internally inconsistent; refusing to "
+                    "reconstruct the version counter from a corrupt record."
+                )
+            if raw > best:
+                best = raw
         return best
 
     @property
