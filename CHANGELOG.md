@@ -7,6 +7,91 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.7.0] - 2026-07-18
+
+Turns the governance thesis from *recorded* into *enforced*: the amendment
+protocol now authorizes ratifications instead of accepting an unverified string,
+the FRIA model stops overclaiming Article 27 coverage, and the docs are
+reconciled to figures traceable to this repository.
+
+### Added — Enforced amendment authority & separation of duties (`authority` module)
+
+- **`AuthorityRegistry`** — stable `principal_id -> AuthorityLevel` map
+  (`PROPOSER` < `RATIFIER` < `CONSTITUTIONAL_AUTHORITY`). `principal_id` is an
+  opaque, stable id (canonicalized for comparison), never a display name. A
+  registry that ships with zero root authorities is rejected at construction.
+- **`IdentityVerifier`** — optional deployer-supplied authentication callback that
+  binds an asserted principal to an external IdP (Entra / Okta / IAM / mTLS / a
+  signed token). It may only add restriction; it can never bypass separation of
+  duty or authority-level rules. Callback failure, exception, timeout, or a
+  malformed (non-`True`) response all **fail closed**.
+- **`AmendmentRecord` + pluggable `AmendmentStore`** (`InMemoryAmendmentStore`,
+  durable `SqliteAmendmentStore`) — an audit-grade, monotonically-versioned log of
+  every RATIFIED and REJECTED decision, capturing proposer/ratifier ids and levels
+  at decision time, identity-assurance mode, the ACTUAL affected paths,
+  before/after constitution hashes, and evidence retained scrubbed + by SHA-256
+  hash. **Credentials, tokens, and secrets are never stored** (`scrub_evidence`).
+
+### Changed — `Constitution.ratify_amendment` is now enforced (BREAKING)
+
+- Ratification enforces (all fail-closed): canonical `proposer_id != ratifier_id`;
+  ratifier must be registered; ordinary amendments require `RATIFIER`+; changes
+  touching **hard constraints or the authority registry** require
+  `CONSTITUTIONAL_AUTHORITY` — determined from the **actual affected config paths,
+  not** the proposer's label; a registry change can never strand the system with
+  zero root authorities. Ratifications are serialized (reentrant lock) so the
+  last-authority guard is atomic under concurrent ratifiers.
+- New `Constitution` kwargs: `authority_registry`, `identity_verifier`,
+  `amendment_store`; new `ratify_amendment(..., asserted_identity=...)` keyword.
+  New properties: `amendment_records`, `constitution_version`, `authority_registry`.
+- **Migration:** with **no** `authority_registry`, the constitution runs in a
+  legacy mode — separation of duty is still enforced and ordinary amendments with
+  distinct proposer/ratifier still ratify, but any change touching hard
+  constraints or the registry is refused fail-closed. Callers that previously
+  relied on `ratify_amendment` returning `True` unconditionally, that let a
+  proposer ratify their own change, or that expected hard-constraint/registry
+  changes to apply without a configured authority must supply an
+  `authority_registry`. Existing tests and simple gate-threshold amendments are
+  unaffected.
+
+### Changed — FRIA model corrected (`fria` module)
+
+- The six built-in categories are relabeled **internal governance-evidence
+  categories** (`GovernanceEvidenceCategory`) — they were previously mislabeled as
+  "the six Article 27 categories." `FRIACategory` remains as a backwards-compatible
+  alias.
+- Added a separate **Article 27(1) crosswalk** (`Article27Element`,
+  `generate_article27_crosswalk`, `fria_support_package`) over the actual 27(1)
+  elements, each classified by evidence source (auto-derived / deployer-supplied /
+  missing) with a legal-review status. Operational gate evidence cannot populate
+  intended use, duration/frequency, affected groups, or complaint arrangements
+  without deployer input, and the crosswalk marks that honestly.
+- The output is explicitly a **FRIA-support package**, not a complete or legally
+  sufficient Article 27 FRIA.
+
+### Fixed — documentation reconciled to traceable figures
+
+- Removed the unqualified "every vendor-neutral engine is stateless" claim;
+  replaced with a **dated (July 2026) documentation-review** statement plus an
+  evidence matrix (product | docs reviewed | retains state? | cross-session
+  aggregate-risk decision?).
+- Qualified the additive risk example so it no longer implies risk sums linearly.
+- Corrected the mislabeled "1,929 governance evaluations" (it was a test-function
+  count, not evaluations) and dropped un-traceable production counts. Library
+  figures are now the real ones from this repo: **218 test functions across 6
+  modules** (223 collected), **12 hard constraints**, **6 gates**, **0** built-in
+  ratified amendments.
+- "Cited in NIST AI 800-2 submissions" → "informed three public-comment
+  submissions concerning NIST AI 800-2 (CAISI acknowledged receipt)."
+
+### Tests
+
+- +44 tests: `test_amendment_authority.py` (34 functions covering every
+  enforcement path + the eight reviewer edge cases) and `test_fria_article27.py`
+  (10). Full suite: **223 passing**.
+
+---
+
 ## [0.6.0] - 2026-07-16
 
 ### Added — Cross-Session Risk Composition (the stateful layer)
