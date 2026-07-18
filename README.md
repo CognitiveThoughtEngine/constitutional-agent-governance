@@ -299,7 +299,8 @@ package  = constitution.fria_support_package(context, deployer_context={
 
 readiness = package["article_27_1_readiness"]
 # {"elements_total": 6, "by_source": {...}, "legally_reviewed": N, "crosswalk_fields_present_and_reviewed": bool}
-# `complete` is True only when no element is missing AND all are legally reviewed.
+# `crosswalk_fields_present_and_reviewed` is true only when no element is missing
+# and all elements are legally reviewed.
 ```
 
 ## Core Concepts
