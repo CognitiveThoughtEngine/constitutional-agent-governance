@@ -1,6 +1,6 @@
 # What Constitutional Governance Has Caught in a 98-Day HRAO-E Production Deployment
 
-**Reference:** This library's README claims *"Production-tested: 98 days in HRAO-E, 52 agents, 1,929 evaluations."* This example documents the failure-mode evidence behind that claim — what the gates and hard constraints actually caught.
+**Reference:** This example documents failure-mode evidence from a 98-day HRAO-E v1.5 production deployment — what the gates and hard constraints actually caught. The figures below describe that deployment, not this library's published test suite.
 
 **Result:** 19 incidents detected, 19 closed, 0 reached external surface.
 
@@ -176,4 +176,4 @@ The append-only retraction ledger is not in this library — it is a downstream 
 
 ---
 
-*This evidence is contributed by a downstream content-governance platform deployment using HRAO-E v1.5 in production. Retraction-ledger entries cited above are paraphrased from the deployment's own append-only ledger; identifying project metadata withheld pending the parent project's public release. The "98 days in HRAO-E, 52 agents, 1,929 evaluations" stat in this library's README references this and related HRAO-E deployments.*
+*This evidence is contributed by a downstream content-governance platform deployment using HRAO-E v1.5 in production. Retraction-ledger entries cited above are paraphrased from the deployment's own append-only ledger; identifying project metadata withheld pending the parent project's public release. These figures describe that deployment and are not claims about this library's published test suite.*

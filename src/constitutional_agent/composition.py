@@ -3,10 +3,13 @@ Constitutional Agent — Cross-Session Risk Composition
 =====================================================
 
 The six gates in :mod:`constitutional_agent.gates` are *memoryless*: each
-``evaluate()`` call scores a single decision in isolation and forgets it. That
-is the industry-standard pattern — every vendor-neutral governance engine that
-shipped in H1 2026 (Microsoft ACS, Galileo Agent Control, Runlayer, NVIDIA
-OpenShell) is stateless / per-intervention.
+``evaluate()`` call scores a single decision in isolation and forgets it. This
+per-intervention pattern is common across the field: in a July 2026 review of
+four vendor-neutral governance products (Microsoft Agent Governance Toolkit,
+Galileo Agent Control, Runlayer, NVIDIA NeMo Guardrails / OpenShell), a durable
+cross-session decision-risk accumulation primitive was *not surfaced in the
+documentation reviewed* — a bounded review of public docs, not a claim of global
+novelty.
 
 Stateless gating has a blind spot: **an agent can pass every individual gate
 and still be dangerous over a sequence.** Ten actions that are each 0.5 on a
