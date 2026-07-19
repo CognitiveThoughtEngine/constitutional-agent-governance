@@ -44,6 +44,14 @@ JUNK_POSITIVE = [
     ".DS_Store",
     ".env.local",
     ".mypy_cache/x",
+    # uppercase / mixed-case must not bypass the credential exclusions
+    "pkg/SERVER.PEM",
+    "pkg/Private.KEY",
+    "GCP-Credentials.JSON",
+    "certs/CERT.P12",
+    "home/.ssh/ID_ED25519",
+    "keys/ID_RSA",
+    "vault/My.KeyStore",
 ]
 
 # Should NOT be flagged — ordinary source / data / packaging files.

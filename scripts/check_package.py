@@ -61,7 +61,8 @@ JUNK_PATTERNS = [
     r"(^|/)\.mypy_cache(/|$)",
     r"(^|/)\.ruff_cache(/|$)",
 ]
-_JUNK = [re.compile(p) for p in JUNK_PATTERNS]
+# Case-insensitive so SERVER.PEM / Private.KEY / GCP-Credentials.JSON can't bypass.
+_JUNK = [re.compile(p, re.IGNORECASE) for p in JUNK_PATTERNS]
 
 errors: list[str] = []
 
