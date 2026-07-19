@@ -7,7 +7,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.7.0] - UNRELEASED
+## [0.7.0] - 2026-07-19
 
 Turns the governance thesis from *recorded* into *enforced*: the amendment
 protocol now authorizes ratifications instead of accepting an unverified string,
