@@ -41,7 +41,8 @@ hard_constraints:
 # ---------------------------------------------------------------------------
 # Gate Configuration
 # ---------------------------------------------------------------------------
-# All gates are enabled by default with production-validated thresholds.
+# All gates are enabled by default with reference defaults derived from HRAO-E;
+# deployment validation required.
 # Override individual thresholds here. Omit a gate block to use defaults.
 
 gates:

@@ -3,8 +3,11 @@ constitutional-agent
 ====================
 WHY-layer constitutional governance for autonomous AI agents.
 
-Based on the HRAO-E Constitutional Framework, production-validated over
-95 days with 52 agents, 64 constitutional amendments, and 1,929 tests.
+Extracted from the HRAO-E Constitutional Framework, a production reference
+implementation of constitutional governance. The library ships the portable
+core: six gates, twelve hard constraints (HC-1..HC-12), an enforced amendment
+protocol with separation of duties, and EU AI Act Article 27(1) FRIA-support
+evidence.
 
 Core concepts:
     Constitution:   The agent's governing document. Load from governance.yaml.
@@ -45,7 +48,36 @@ from constitutional_agent.composition import (
     SqliteRiskStore,
     default_risk_weight,
 )
-from constitutional_agent.constitution import Constitution, ConstitutionalViolation
+from constitutional_agent.authority import (
+    AmendmentRecord,
+    AmendmentStore,
+    AuthorityLevel,
+    AuthorityRegistry,
+    IdentityVerifier,
+    InMemoryAmendmentStore,
+    SqliteAmendmentStore,
+    bounded_verifier,
+    canonical_principal,
+    redact_secrets,
+    scrub_evidence,
+)
+from constitutional_agent.constitution import (
+    Constitution,
+    ConstitutionalViolation,
+    ConstitutionIntegrityError,
+)
+from constitutional_agent.fria import (
+    Article27Applicability,
+    Article27Crosswalk,
+    Article27Element,
+    EvidenceSource,
+    FRIAEvidence,
+    GovernanceEvidenceCategory,
+    LegalReviewStatus,
+    fria_support_package,
+    generate_article27_crosswalk,
+    generate_fria_evidence,
+)
 from constitutional_agent.gates import (
     AutonomyGate,
     ConstitutionalGate,
@@ -69,7 +101,7 @@ from constitutional_agent.schema import (
     SystemState,
 )
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 __author__ = "Cognitive Thought Engine LLC"
 __license__ = "MIT"
 __url__ = "https://github.com/CognitiveThoughtEngine/constitutional-agent-governance"
@@ -78,6 +110,7 @@ __all__ = [
     # Constitution — primary entry point
     "Constitution",
     "ConstitutionalViolation",
+    "ConstitutionIntegrityError",
     # Gates — individual gate classes
     "SixGateEvaluator",
     "EpistemicGate",
@@ -101,6 +134,29 @@ __all__ = [
     "InMemoryRiskStore",
     "SqliteRiskStore",
     "default_risk_weight",
+    # Amendment authority & separation of duties (v0.7.0)
+    "AuthorityLevel",
+    "AuthorityRegistry",
+    "IdentityVerifier",
+    "AmendmentRecord",
+    "AmendmentStore",
+    "InMemoryAmendmentStore",
+    "SqliteAmendmentStore",
+    "canonical_principal",
+    "scrub_evidence",
+    "redact_secrets",
+    "bounded_verifier",
+    # FRIA-support: internal evidence + Article 27(1) crosswalk (v0.7.0)
+    "GovernanceEvidenceCategory",
+    "FRIAEvidence",
+    "Article27Element",
+    "Article27Crosswalk",
+    "Article27Applicability",
+    "EvidenceSource",
+    "LegalReviewStatus",
+    "generate_fria_evidence",
+    "generate_article27_crosswalk",
+    "fria_support_package",
     # Schema / types
     "GateState",
     "GateResult",

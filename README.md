@@ -9,9 +9,9 @@
 
 Your agent is authenticated (**WHO**) and inside its permissions (**HOW**). This library answers the question those layers can't: **is the _authorized_ action _sound_ — given its constitution, six gates, and twelve hard constraints — evaluated before it commits?**
 
-Extracted from HRAO-E: 98 days in production, 52 agents, 1,929 governance evaluations. Cited in NIST AI 800-2 submissions. Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
+Extracted from HRAO-E, a production reference implementation of constitutional governance. Informed three public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt). Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
 
-> **Maturity, honestly:** the six gates, execution states, twelve hard constraints, and EU AI Act Article 27 FRIA evidence have shipped since v0.4. Stateful _cross-session cumulative-risk composition_ — catching that specific aggregate — **shipped in v0.6.0** (the `composition` module; see below). It is new: battle-tested in unit tests and modeled on the measured AgentCore gap, but not yet hardened across as many production-days as the core gates.
+> **Maturity, honestly:** the six gates, execution states, and twelve hard constraints have shipped since v0.4; EU AI Act Article 27(1) FRIA-support evidence (a support package, not a complete FRIA) and an enforced amendment-authority protocol are current. Stateful _cross-session cumulative-risk composition_ — catching that specific aggregate — **shipped in v0.6.0** (the `composition` module; see below). It is new: exercised in unit tests and modeled on the measured AgentCore gap, but not yet hardened across as many production-days as the core gates.
 
 ### Where this sits
 
@@ -25,19 +25,33 @@ Enforcement toolkits sit at the execution boundary; the constitution sits above 
 
 ## What makes this different: cross-session risk composition
 
-Every vendor-neutral governance engine shipped in 2026 — Microsoft ACS, Galileo
-Agent Control, Runlayer, NVIDIA OpenShell — is **stateless**: it scores each
-action in isolation and forgets it. They all share one blind spot. **An agent
-can pass every individual gate and still be dangerous over a sequence.** Ten
-actions that are each 0.5 on a 0–1 risk scale — all comfortably below any
-per-call threshold — compose into a trajectory no single evaluation flags.
+Most vendor-neutral governance engines score each action in isolation. That
+leaves a blind spot: **an agent can pass every individual gate and still drift
+into trouble over a sequence** — a series of individually acceptable actions can
+exceed a separately defined *cumulative-risk budget* that no single evaluation
+tracks.
 
-`constitutional-agent` is the one that remembers. The `ComposedEvaluator`
+**Documentation review (as of July 2026):** across the public documentation I
+reviewed for the products below, I did not find an explicit mechanism that
+accumulates a per-decision scalar risk weight *across sessions* and escalates
+system posture when that trajectory crosses a threshold. This is a review of
+published docs, not a source audit — vendors add features continuously, so treat
+it as a dated snapshot, not a standing claim.
+
+| Product | Docs reviewed (date) | Retains state? | Cross-session aggregate-risk decision? |
+|---------|----------------------|----------------|----------------------------------------|
+| Microsoft Agent Control / AGT | Jul 2026 | Session/policy state | Not found in reviewed docs |
+| Galileo Agent Control | Jul 2026 | Traces/metrics | Not found in reviewed docs |
+| Runlayer | Jul 2026 | Policy/runtime state | Not found in reviewed docs |
+| NVIDIA NeMo Guardrails | Jul 2026 | Per-turn rails | Not found in reviewed docs |
+
+`constitutional-agent` targets exactly that gap. The `ComposedEvaluator`
 accumulates a risk weight per decision, composes it across a rolling window
 (optionally with time decay), and escalates the system state when the
-*accumulation* crosses a line — **even when every contributing decision, and all
-six memoryless gates, passed.** Point it at the durable `SqliteRiskStore` and the
-risk an agent built up yesterday still counts today.
+*accumulation* crosses a separately configured cumulative-risk budget — even when
+every contributing decision, and all six memoryless gates, passed. Point it at
+the durable `SqliteRiskStore` and the risk an agent built up yesterday still
+counts today.
 
 ```python
 from constitutional_agent import ComposedEvaluator, AccumulatedRiskComposer, SqliteRiskStore
@@ -47,13 +61,15 @@ evaluator = ComposedEvaluator(
     composer=AccumulatedRiskComposer(store=SqliteRiskStore("risk.db")),
 )
 
-# Each decision is individually fine (misuse 0.5 < the 0.65 per-call HOLD)...
+# Each decision clears the per-call HOLD, but the accumulation is tracked
+# against a cumulative-risk budget (risk does NOT simply sum linearly — the
+# composer applies its own weighting/decay; see the composition module).
 decision = {"misuse_risk_index": 0.5, "runway_months": 10, "lessons_learned_weekly": 3}
 for _ in range(7):
     result = evaluator.evaluate(decision, subject="pricing-agent")
 
 print(result.per_call_state.value)  # RUN   — the six gates see nothing wrong
-print(result.system_state.value)    # FREEZE — the trajectory did
+print(result.system_state.value)    # FREEZE — the trajectory crossed the budget
 print(result.escalated)             # True
 print(result.composition.reason)    # cites the accumulated-risk threshold + evidence
 ```
@@ -245,28 +261,46 @@ else:
 
 ---
 
-## EU AI Act Article 27 — FRIA Output (v0.4.0)
+## EU AI Act Article 27 — FRIA-support package
 
-`constitution.fria_evidence(context)` maps all six gates to the six FRIA categories required by EU AI Act Article 27. Deployments subject to the Act must complete a Fundamental Rights Impact Assessment before going live; this method generates structured evidence directly from live evaluation data.
+**This library does not produce a complete or legally sufficient Article 27 FRIA.**
+It produces a *FRIA-support package*: operational governance evidence that a human
+author — with deployer context and legal review — can fold into a real
+Fundamental Rights Impact Assessment.
+
+Two distinct artifacts:
+
+1. **Internal governance-evidence categories** (`GovernanceEvidenceCategory`) —
+   the framework's own six evidence buckets derived from gate and hard-constraint
+   results. These are **not** the Article 27 categories; they are internal
+   groupings of the operational evidence the framework can measure.
+2. **Article 27(1) crosswalk** (`Article27Element`) — the ACTUAL elements Article
+   27(1)(a)–(f) enumerates (deployment process & intended use; duration &
+   frequency; affected persons/groups; specific risks of harm; human-oversight
+   measures; governance/complaint arrangements). For each, the crosswalk states
+   honestly whether the evidence is *auto-derived operational evidence*, *required
+   deployer-supplied context*, or *missing/unverified*, plus a legal-review
+   status. Operational gate telemetry cannot, on its own, establish intended use,
+   duration/frequency, the affected population, or complaint arrangements — those
+   require deployer input, and the crosswalk marks them as such rather than
+   silently populating them.
 
 ```python
-from constitutional_agent.fria import fria_summary, fria_narrative
+# Internal governance-evidence buckets (NOT the Article 27 categories):
+evidence = constitution.fria_evidence(context)          # list[FRIAEvidence]
 
-evidence = constitution.fria_evidence(context)  # list[FRIAEvidence]
-summary  = fria_summary(evidence)               # {overall_status, covered, flagged, gaps}
-report   = fria_narrative(evidence)             # human-readable markdown
+# Article 27(1) crosswalk + support package (honest about deployer gaps):
+package  = constitution.fria_support_package(context, deployer_context={
+    "deployment_process_and_intended_use": "...",
+    "duration_and_frequency": "...",
+    "affected_persons_and_groups": "...",
+    "legal_review": {"specific_risks_of_harm": "reviewed"},
+})
 
-# Six categories automatically populated:
-# Safety & robustness      -> RiskGate + HC-1/7
-# Non-discrimination       -> EpistemicGate
-# Human oversight          -> AutonomyGate + HC-12
-# Privacy & data governance -> RiskGate
-# Transparency             -> GovernanceGate + HC-4/11
-# Accountability           -> GovernanceGate + HC-11/12
-
-if summary["overall_status"] != "compliant":
-    gaps = [k for k, v in summary["categories"].items() if v["status"] != "covered"]
-    print("FRIA gaps:", gaps)
+readiness = package["article_27_1_readiness"]
+# {"elements_total": 6, "by_source": {...}, "legally_reviewed": N, "crosswalk_fields_present_and_reviewed": bool}
+# `crosswalk_fields_present_and_reviewed` is true only when no element is missing
+# and all elements are legally reviewed.
 ```
 
 ## Core Concepts
@@ -314,27 +348,77 @@ Hard constraint violations short-circuit to `STOP` state — not FREEZE. The dif
 
 Constitutional governance is not static. Rules must evolve as context changes. The amendment process enables formal evolution without losing foundational constraints.
 
-**Key properties:**
-- Agents can **propose** amendments — they cannot **ratify** them
-- Ratification requires the designated authority (not the proposing agent)
-- Hard constraint (HC-*) amendments require the highest authority
-- All amendments are versioned and logged
+**Enforced, not merely recorded (v0.7.0).** Ratification runs an authority
+protocol — all checks fail-closed:
+
+- **Separation of duty:** the ratifier must be a *different* principal from the
+  proposer (compared on a canonical principal id, so whitespace/case variants of
+  the same identity cannot slip through).
+- **Authority levels** (`AuthorityLevel`: `PROPOSER` < `RATIFIER` <
+  `CONSTITUTIONAL_AUTHORITY`): ordinary amendments require `RATIFIER`+; any change
+  touching **hard constraints or the authority registry** requires
+  `CONSTITUTIONAL_AUTHORITY`. The required level is derived from the **actual
+  affected configuration paths**, never from a proposer-supplied label.
+- **Last-authority guard:** a registry change can never remove or demote the final
+  `CONSTITUTIONAL_AUTHORITY` — the system is never left with zero root authorities.
+- **Durable, audit-grade record** for every decision (RATIFIED *and* REJECTED):
+  proposer/ratifier ids + their levels, required authority, identity-assurance
+  mode, actual affected paths, before/after constitution hashes, a monotonic
+  version, and evidence retained scrubbed + by SHA-256 hash. Values under
+  recognized secret-shaped keys are redacted before persistence (key-name
+  detection — it does not guarantee that a secret value placed under a generic
+  key is caught).
+
+> **Restart recovery is version-only.** With a durable store, a new
+> `Constitution` reconstructs the **monotonic version counter** from the ledger —
+> fail-closed: an unreadable store or a malformed RATIFIED record raises
+> `ConstitutionIntegrityError` rather than reset to 0 and risk reissuing an
+> existing version number. It does **not** restore the governing configuration,
+> authority registry, hard constraints, or pending proposals. Reload that governed
+> state from its own source and verify it against the last record's
+> `constitution_hash_after`; do not assume the amendment store recovers the full
+> constitution.
+
+> **Trust boundary.** The library authorizes a *registered* principal according to
+> constitutional policy. It does **not** prove the caller controls that identity.
+> Deployers can supply an authentication callback (`IdentityVerifier`) to bind the
+> asserted principal to Entra / Okta / IAM / mTLS / a signed token / etc. The
+> callback may only add restriction — it can never bypass separation-of-duty or
+> authority-level rules.
 
 ```python
-# Propose (agent can do this)
-amendment_id = constitution.propose_amendment(
-    description="Reduce EpistemicGate hold threshold from 0.70 to 0.65",
-    rationale="External verification latency increased. 0.65 still provides adequate safety.",
-    affected_sections=["EpistemicGate"],
-    proposed_by="my_agent_v2",
+from constitutional_agent import Constitution, IdentityVerifier
+
+# The initial registry is trusted deployer config — the bootstrap root of trust.
+# After construction, registry changes flow through the SAME amendment process
+# and require CONSTITUTIONAL_AUTHORITY. principal_id is an opaque, stable id.
+constitution = Constitution(
+    config=my_config,
+    authority_registry={
+        "svc-ceo-key-1a2b": "CONSTITUTIONAL_AUTHORITY",
+        "svc-cto-key-9f8e": "RATIFIER",
+    },
+    # Optional: bind the asserted ratifier to your IdP (returns True/False).
+    identity_verifier=IdentityVerifier(name="entra", verify=my_entra_check),
 )
 
-# Ratify (requires designated human authority — not the proposing agent)
-constitution.ratify_amendment(
-    amendment_id=amendment_id,
-    ratified_by="cto@yourorg.com",
-    evidence={"latency_data": "p99 verification latency: 4.2s"}
+# Propose (any principal / agent may propose)
+amendment_id = constitution.propose_amendment(
+    description="Reduce EpistemicGate hold threshold from 0.70 to 0.65",
+    rationale="External verification latency increased. 0.65 still adequate.",
+    affected_sections=["EpistemicGate"],
+    proposed_by="agent-pricing-v2",
+    changes={"gates": {"epistemic": {"hold_threshold": 0.65}}},
 )
+
+# Ratify (must be a distinct, sufficiently-authorized, registered principal)
+ok = constitution.ratify_amendment(
+    amendment_id=amendment_id,
+    ratified_by="svc-cto-key-9f8e",
+    evidence={"latency_data": "p99 verification latency: 4.2s"},
+    asserted_identity={"jwt": "<token>"},  # passed to the verifier; never stored
+)
+# ok is False (and a REJECTED record is written) if any check fails.
 ```
 
 ---
@@ -445,7 +529,7 @@ Load from a `governance.yaml` file:
 constitution = Constitution.load("governance.yaml")
 ```
 
-Or use production-validated defaults:
+Or use reference defaults derived from HRAO-E (deployment validation required):
 
 ```python
 constitution = Constitution.from_defaults()
@@ -485,23 +569,18 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 
 ## The Reference Implementation
 
-This library is a portable extract from the HRAO-E Constitutional Framework — a production autonomous organization that has operated under constitutional governance for 98 days.
+This library is a portable extract from the HRAO-E Constitutional Framework — a production reference implementation of constitutional governance.
 
-**This library:**
-- **150 test functions** across 3 test modules, 0 failed
+**This library (verifiable from this repo):**
+- **243 test functions** across 6 test modules (253 collected cases), 0 failed
 - **12 hard constraints** (HC-1 through HC-12) enforced in code
 - **6 constitutional gates** (EG, RG, GG, EPG, AAG, CGG)
-- `fria_evidence()` generates EU AI Act Article 27 FRIA evidence programmatically
+- **Enforced amendment protocol** — separation of duties + authority levels + last-authority guard, with a durable audit record
+- `fria_support_package()` generates EU AI Act Article 27(1) crosswalk evidence programmatically (a FRIA-support package, not a complete FRIA)
 
-**The production system this was extracted from (HRAO-E):**
-- **52 agents** operating under constitutional governance per cycle
-- **64 constitutional amendments** ratified through formal process
-- **1,929 test functions**, 0 failed
-- **17 hard constraints** (HC-1 through HC-17, including 5 additional production constraints)
+The library ships HC-1 through HC-12 — the portable, organization-agnostic core. Additional HRAO-E-specific operational constraints are not included in the library.
 
-The library ships HC-1 through HC-12 — the portable, organization-agnostic core. HC-13 through HC-17 are HRAO-E-specific operational constraints not included in the library.
-
-The framework has been cited in NIST submissions (800-2, Agent Identity) and acknowledged by CAISI. Eight preprints published on Zenodo.
+The framework has informed three public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt). Multiple preprints are published on Zenodo — see [Citation](#citation).
 
 **Self-assessment:** We ran the Constitutional AI Governance Stress Test (CGST) on this library before offering it as a service. Score: **63/100 (Governance Draft)**. Ungoverned baseline: 6/100. [Full report](https://www.cteinvest.com/blog/cgst-self-assessment-constitutional-agent.html).
 

@@ -181,7 +181,7 @@ Strong constitutional governance. You are in Level 3-4 territory. Validate again
 
 ## Reference Implementation
 
-The only production-validated constitutional governance reference as of 2026-05-01:
+The constitutional governance reference (derived from HRAO-E; deployment validation required) as of 2026-05-01:
 
 - **Organization:** Cognitive Thought Engine LLC
 - **Framework:** HRAO-E v1.5 Constitutional Framework

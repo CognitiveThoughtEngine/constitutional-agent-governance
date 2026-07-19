@@ -30,6 +30,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import threading
 import uuid
 import warnings
 from datetime import datetime, timezone
@@ -46,6 +47,17 @@ from constitutional_agent.gates import (
     GovernanceGate,
     RiskGate,
     SixGateEvaluator,
+)
+from constitutional_agent.authority import (
+    AmendmentRecord,
+    AmendmentStore,
+    AuthorityLevel,
+    AuthorityRegistry,
+    IdentityVerifier,
+    InMemoryAmendmentStore,
+    canonical_principal,
+    redact_secrets,
+    scrub_evidence,
 )
 from constitutional_agent.hard_constraints import (
     BUILTIN_HARD_CONSTRAINTS,
@@ -101,13 +113,31 @@ class ConstitutionalViolation(Exception):
         )
 
 
+class ConstitutionIntegrityError(Exception):
+    """
+    Raised when the durable amendment ledger cannot be trusted for a safety-
+    critical reconstruction — e.g. a *configured* store is unreadable, or a
+    persisted RATIFIED record is internally inconsistent (a malformed version).
+
+    Deliberately fail-CLOSED: rather than silently reset the monotonic version
+    counter to 0 (which could reissue existing version numbers), the Constitution
+    refuses to start until the ledger is repaired or replaced.
+    """
+
+
 class AmendmentProposal:
     """
     A proposed constitutional amendment.
 
     Amendments must be ratified by the designated authority before taking
     effect. Agents can propose amendments but cannot ratify their own proposals.
-    Hard constraints (HC-*) require the highest authority to ratify.
+    Hard constraints (HC-*) and authority-registry changes require the highest
+    authority (CONSTITUTIONAL_AUTHORITY) to ratify.
+
+    ``proposed_by`` is the proposer's opaque, stable ``principal_id`` — not a
+    display name. At ratification the constitution enforces that the ratifier is
+    a *different* registered principal with sufficient authority for the ACTUAL
+    configuration paths the change touches.
     """
 
     def __init__(
@@ -128,6 +158,8 @@ class AmendmentProposal:
         self.ratified_at: Optional[str] = None
         self.ratified_by: Optional[str] = None
         self.changes: Optional[dict[str, Any]] = changes
+        # Populated once a ratify/reject decision is made (audit-grade record).
+        self.decision: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -135,12 +167,16 @@ class AmendmentProposal:
             "description": self.description,
             "rationale": self.rationale,
             "affected_sections": self.affected_sections,
+            # proposer_id is the canonical field; proposed_by kept for compat.
             "proposed_by": self.proposed_by,
+            "proposer_id": self.proposed_by,
             "proposed_at": self.proposed_at,
             "status": self.status,
             "ratified_at": self.ratified_at,
             "ratified_by": self.ratified_by,
+            "ratifier_id": self.ratified_by,
             "changes": self.changes,
+            "decision": self.decision,
         }
 
 
@@ -171,6 +207,18 @@ class Constitution:
     hard constraints are enforced on every evaluate() call regardless of
     agent preferences, economic pressure, or prior decisions.
 
+    Amendment authority (trust boundary):
+        Ratification is *enforced*, not merely recorded. Configure an
+        ``authority_registry`` (``principal_id -> authority level``) to require
+        separation of duty and sufficient authority for each change. The library
+        authorizes a *registered* principal according to constitutional policy;
+        it does **not** prove the caller controls that identity. Supply an
+        ``identity_verifier`` to bind the asserted principal to an external
+        system (Entra / Okta / IAM / mTLS / a signed token). Without a registry
+        the constitution runs in a legacy amendment mode: separation of duty is
+        still enforced, but changes touching hard constraints or the registry are
+        refused fail-closed.
+
     Example:
         constitution = Constitution.load("governance.yaml")
         result = constitution.evaluate(metrics)
@@ -194,15 +242,20 @@ class Constitution:
         strict_mode: bool = False,
         on_evaluate: Optional[Callable[["ConstitutionResult"], None]] = None,
         on_amendment_ratified: Optional[Callable[[dict[str, Any]], None]] = None,
+        authority_registry: Optional[dict[str, Any] | AuthorityRegistry] = None,
+        identity_verifier: Optional[IdentityVerifier] = None,
+        amendment_store: Optional[AmendmentStore] = None,
     ) -> None:
         self._config = config
         self._evaluator = evaluator or self._build_evaluator(config)
-        # Start with builtins (or caller-supplied list), then append YAML-defined HCs
-        self._hard_constraints = list(
+        # Keep the base list separate so hard-constraint amendments can rebuild
+        # the effective set (base builtins + YAML/amendment-defined layer).
+        self._base_hard_constraints = list(
             hard_constraints
             if hard_constraints is not None
             else BUILTIN_HARD_CONSTRAINTS
         )
+        self._hard_constraints = list(self._base_hard_constraints)
         yaml_hcs = self._parse_yaml_hard_constraints(
             config.get("hard_constraints", [])
         )
@@ -212,6 +265,47 @@ class Constitution:
         self._strict_mode = strict_mode
         self._on_evaluate = on_evaluate
         self._on_amendment_ratified = on_amendment_ratified
+
+        # --- Amendment authority / separation of duties ---
+        # The initial registry is trusted deployer-supplied config (the bootstrap
+        # root of trust). After construction, changes to it flow through the same
+        # amendment process and require CONSTITUTIONAL_AUTHORITY. If no registry
+        # is configured, the constitution runs in a legacy (unauthenticated)
+        # amendment mode — separation of duty is still enforced, but any change
+        # touching hard constraints or the registry itself is refused fail-closed.
+        reg_source: Optional[dict[str, Any] | AuthorityRegistry]
+        reg_source = (
+            authority_registry
+            if authority_registry is not None
+            else config.get("authority_registry")
+        )
+        if reg_source is None:
+            self._authority: Optional[AuthorityRegistry] = None
+        elif isinstance(reg_source, AuthorityRegistry):
+            self._authority = reg_source
+        else:
+            self._authority = AuthorityRegistry(reg_source)
+
+        self._identity_verifier = identity_verifier
+        self._amendment_store: AmendmentStore = (
+            amendment_store if amendment_store is not None else InMemoryAmendmentStore()
+        )
+        # Restore the monotonic version from the durable store so it survives a
+        # process restart (a fresh InMemoryAmendmentStore yields 0). Without this
+        # a restarted process would reset to 0 and re-mint versions that collide
+        # with already-persisted records.
+        self._constitution_version = self._reconstruct_version()
+        # Serializes ratification so the check-then-apply of the last-authority
+        # guard (and version bump) is atomic under concurrent ratifiers WITHIN
+        # ONE Constitution instance in ONE process. Without it, two interleaved
+        # ratifiers could each pass a guard evaluated against a stale registry
+        # and together strand the system with zero root authorities. Reentrant so
+        # nested internal calls do not deadlock. NOTE: this lock is instance-
+        # local — it does NOT coordinate multiple Constitution instances or
+        # multiple processes sharing one durable store. Cross-process ratification
+        # requires a durable compare-and-swap / transaction in the store and is
+        # the deployer's responsibility (out of scope for this library).
+        self._ratify_lock = threading.RLock()
 
     @classmethod
     def load(cls, path: str | Path) -> "Constitution":
@@ -254,8 +348,8 @@ class Constitution:
         """
         Create a Constitution with default built-in configuration.
 
-        Uses all six gates with production-validated thresholds from the
-        HRAO-E Constitutional Framework. Suitable for getting started
+        Uses all six gates with reference defaults derived from HRAO-E;
+        deployment validation required. Suitable for getting started
         without a governance.yaml file.
 
         Returns:
@@ -437,80 +531,607 @@ class Constitution:
         amendment_id: str,
         ratified_by: str,
         evidence: Optional[dict[str, Any]] = None,
+        *,
+        asserted_identity: Optional[dict[str, Any]] = None,
     ) -> bool:
         """
-        Ratify a pending constitutional amendment.
+        Ratify a pending constitutional amendment, enforcing the authority
+        protocol (separation of duty + authority levels + last-authority guard).
 
-        Ratification should be performed by the designated authority, not
-        by the proposing agent. Hard constraint (HC-*) amendments require
-        the highest authority.
+        **BREAKING (0.7.0):** ratification is now *enforced*, not merely recorded.
+        A call that violates separation of duty, is made by an unregistered or
+        under-privileged ratifier, or would strand the system with zero root
+        authorities now returns ``False`` and records a REJECTED decision — where
+        earlier versions recorded the string and returned ``True`` unconditionally.
+
+        Enforcement (all fail-closed):
+          - the ratifier's ``principal_id`` must differ from the proposer's
+            (separation of duty) — enforced even with no registry configured;
+          - the ratifier must be present in the authority registry;
+          - ordinary amendments require ``RATIFIER`` or higher;
+          - any change touching **hard constraints or the authority registry**
+            requires ``CONSTITUTIONAL_AUTHORITY``. The required level is derived
+            from the ACTUAL affected configuration paths, not from the proposer's
+            ``affected_sections`` label;
+          - a registry change may not remove or demote the final
+            ``CONSTITUTIONAL_AUTHORITY`` (the system is never left with zero root
+            authorities);
+          - if an identity-verification callback is configured, it must
+            authenticate the asserted ratifier; a callback that returns ``False``
+            or raises rejects the ratification.
+
+        **Trust boundary.** The library authorizes a *registered* principal per
+        constitutional policy. It does **not** prove the caller controls that
+        identity. Supply ``identity_verifier`` (see ``Constitution.__init__``) to
+        bind the asserted principal to Entra / Okta / IAM / mTLS / a signed token.
+
+        **Concurrency scope.** The atomicity and last-authority guarantees are
+        **instance-local**: they hold across concurrent ratifiers sharing a
+        single Constitution instance within one process. They do NOT protect
+        multiple Constitution instances or multiple processes sharing one durable
+        store — cross-process ratification requires a durable compare-and-swap /
+        transaction in the store and is the deployer's responsibility.
 
         Args:
-            amendment_id: The amendment ID returned by propose_amendment().
-            ratified_by:  Identifier of the ratifying authority.
-            evidence:     Optional supporting evidence for the ratification.
+            amendment_id:      ID returned by ``propose_amendment()``.
+            ratified_by:       The ratifier's opaque, stable ``principal_id``.
+            evidence:          Optional supporting evidence. Retained scrubbed +
+                               by SHA-256 hash; secrets/tokens are never stored.
+            asserted_identity: Optional claims/token passed to the identity
+                               verifier. Never stored (only the pass/fail result
+                               and verifier name are recorded).
 
         Returns:
-            True if the amendment was found and ratified.
-            False if the amendment ID was not found or already ratified.
+            True if ratified; False if not found, already decided, or rejected by
+            the authority protocol. On rejection the reason is recorded in the
+            amendment's ``decision`` (see ``amendment_log`` / ``amendment_records``).
         """
-        for amendment in self._amendments:
-            if amendment.id == amendment_id and amendment.status == "PENDING":
-                # Apply config changes before marking ratified so status stays
-                # consistent with evaluator state on error.
-                if amendment.changes:
-                    config_backup = copy.deepcopy(self._config)
-                    try:
-                        self._deep_merge(self._config, amendment.changes)
-                        self._evaluator = self._build_evaluator(self._config)
-                    except Exception:
-                        self._config = config_backup
-                        raise
-                # Mark ratified only after config changes succeed
-                amendment.status = "RATIFIED"
-                amendment.ratified_at = datetime.now(timezone.utc).isoformat()
-                amendment.ratified_by = ratified_by
-                if self._on_amendment_ratified is not None:
-                    self._on_amendment_ratified(amendment.to_dict())
-                return True
-        return False
+        with self._ratify_lock:
+            return self._ratify_locked(
+                amendment_id,
+                ratified_by,
+                evidence,
+                asserted_identity=asserted_identity,
+            )
+
+    def _ratify_locked(
+        self,
+        amendment_id: str,
+        ratified_by: str,
+        evidence: Optional[dict[str, Any]] = None,
+        *,
+        asserted_identity: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        """Ratification body, executed while holding ``_ratify_lock``.
+
+        Serialization makes the last-authority guard's check-then-apply atomic:
+        the registry it simulates against is the one it will actually mutate, so
+        interleaved ratifiers cannot together drop the system below one root
+        authority.
+
+        **Scope: instance-local.** ``_ratify_lock`` only serializes ratifiers
+        that share THIS Constitution instance in THIS process. It does not
+        coordinate separate Constitution instances or separate processes sharing
+        one durable store — for that, the deployer must provide a durable
+        compare-and-swap / transaction in the store (out of scope here).
+        """
+        amendment = next(
+            (a for a in self._amendments
+             if a.id == amendment_id and a.status == "PENDING"),
+            None,
+        )
+        if amendment is None:
+            return False
+
+        proposer_id = amendment.proposed_by
+        ratifier_id = ratified_by
+        hash_before = self._constitution_hash()
+        affected_paths = self._affected_paths(amendment.changes)
+        required = self._required_authority(affected_paths)
+        legacy = self._authority is None
+
+        proposer_level = (
+            self._authority.level_of(proposer_id) if self._authority else None
+        )
+        ratifier_level = (
+            self._authority.level_of(ratifier_id) if self._authority else None
+        )
+
+        # --- Authorization checks (fail-closed) -----------------------------
+        reject: Optional[str] = None
+
+        # 1. Separation of duty — always enforced, even in legacy mode. Compared
+        #    on the canonical principal id so whitespace/case variants of the same
+        #    identity cannot slip past the proposer != ratifier rule.
+        if canonical_principal(proposer_id) == canonical_principal(ratifier_id):
+            reject = (
+                f"Separation of duty: proposer and ratifier must be distinct "
+                f"principals (both resolve to '{canonical_principal(ratifier_id)}'). "
+                "A proposer cannot ratify their own amendment."
+            )
+        elif legacy:
+            # 2. Legacy mode: no registry to verify root authority against. Root
+            #    governance changes cannot be authorized — refuse fail-closed.
+            if required >= AuthorityLevel.CONSTITUTIONAL_AUTHORITY:
+                reject = (
+                    "Change touches hard constraints or the authority registry "
+                    f"(paths: {', '.join(affected_paths) or '<root>'}), which "
+                    "requires CONSTITUTIONAL_AUTHORITY, but no authority registry "
+                    "is configured. Configure authority_registry to authorize "
+                    "root governance changes."
+                )
+        else:
+            assert self._authority is not None  # narrow for type-checkers
+            # 3. Ratifier must be registered.
+            if ratifier_level is None:
+                reject = (
+                    f"Ratifier '{ratifier_id}' is not in the authority registry. "
+                    "Only registered principals may ratify."
+                )
+            # 4. Authority level sufficient for the ACTUAL affected paths.
+            elif ratifier_level < required:
+                reject = (
+                    f"Insufficient authority: ratifying a change to "
+                    f"{', '.join(affected_paths) or '<config>'} requires "
+                    f"{required.name}, but '{ratifier_id}' holds "
+                    f"{ratifier_level.name}."
+                )
+            # 5. Registry changes may not strand the system without a root.
+            elif self._touches_registry(affected_paths):
+                simulated = self._authority.with_changes(
+                    amendment.changes.get("authority_registry", {})  # type: ignore[union-attr]
+                )
+                if simulated.root_count() < 1:
+                    reject = (
+                        "Registry change would remove or demote the final "
+                        "CONSTITUTIONAL_AUTHORITY, leaving the system with zero "
+                        "root authorities. Refused — the constitution must always "
+                        "retain at least one root authority."
+                    )
+
+        # 6. Identity verification callback (only reached if policy passed).
+        identity_assurance = "caller_asserted"
+        identity_verifier_name: Optional[str] = None
+        if reject is None and self._identity_verifier is not None:
+            try:
+                raw = self._identity_verifier.verify(ratifier_id, asserted_identity)
+                # Strict: only an explicit boolean True authenticates. A malformed
+                # response (None, a truthy non-bool, a dict, a numeric 1, a string)
+                # fails closed rather than being coerced to a pass.
+                verified = raw is True
+            except Exception:
+                # Fail-closed when the verifier RAISES (including a TimeoutError
+                # it raises itself). NOTE: this cannot interrupt a callback that
+                # blocks/hangs — Python cannot preempt a running call. A verifier
+                # that may block must enforce its own wall-clock timeout (see
+                # authority.bounded_verifier, best-effort).
+                verified = False
+            if verified:
+                identity_assurance = "externally_verified"
+                identity_verifier_name = self._identity_verifier.name
+            else:
+                reject = (
+                    f"Identity verification failed for ratifier '{ratifier_id}' "
+                    f"(verifier '{self._identity_verifier.name}'). The asserted "
+                    "principal could not be authenticated."
+                )
+
+        scrubbed_evidence, evidence_hash = scrub_evidence(evidence)
+
+        # --- Rejection path -------------------------------------------------
+        if reject is not None:
+            # PENDING -> REJECTED is terminal, but the transition is only durable
+            # once the decision record is persisted. Mirror the ratified path's
+            # atomic-rollback discipline: if _finalize_amendment (the ledger write)
+            # raises, undo the in-memory terminal transition so the proposal stays
+            # PENDING for a later retry. A rejected proposal must never be terminal
+            # in memory with no durable decision record. (Nothing governing changes
+            # on rejection, so only the amendment lifecycle fields need restoring.)
+            prior_status = amendment.status
+            prior_decision = amendment.decision
+            amendment.status = "REJECTED"
+            try:
+                self._finalize_amendment(
+                    amendment,
+                    outcome="REJECTED",
+                    ratifier_id=ratifier_id,
+                    proposer_level=proposer_level,
+                    ratifier_level=ratifier_level,
+                    required=required,
+                    affected_paths=affected_paths,
+                    identity_assurance=identity_assurance,
+                    identity_verifier_name=identity_verifier_name,
+                    scrubbed_evidence=scrubbed_evidence,
+                    evidence_hash=evidence_hash,
+                    hash_before=hash_before,
+                    hash_after=hash_before,  # nothing changed
+                    version=self._constitution_version,
+                    reason=reject,
+                )
+            except Exception:
+                amendment.status = prior_status
+                amendment.decision = prior_decision
+                raise
+            return False
+
+        # --- Apply changes AND persist the ledger record atomically ---------
+        # Capture the exact governing state and version BEFORE any mutation. If
+        # applying the change OR writing the durable ledger record raises, we
+        # restore the system to precisely its pre-ratify state: no live
+        # governance change is ever left without durable evidence, and no
+        # half-applied change survives a store-write failure. Net: a failed
+        # ratify leaves the system exactly as it was before the call.
+        prior_version = self._constitution_version
+        backup = self._snapshot_state()
+        try:
+            if amendment.changes:
+                self._apply_amendment_changes(amendment.changes)
+
+            # Bump monotonic version only after changes succeed.
+            self._constitution_version += 1
+            amendment.status = "RATIFIED"
+            amendment.ratified_at = datetime.now(timezone.utc).isoformat()
+            amendment.ratified_by = ratifier_id
+            hash_after = self._constitution_hash()
+
+            self._finalize_amendment(
+                amendment,
+                outcome="RATIFIED",
+                ratifier_id=ratifier_id,
+                proposer_level=proposer_level,
+                ratifier_level=ratifier_level,
+                required=required,
+                affected_paths=affected_paths,
+                identity_assurance=identity_assurance,
+                identity_verifier_name=identity_verifier_name,
+                scrubbed_evidence=scrubbed_evidence,
+                evidence_hash=evidence_hash,
+                hash_before=hash_before,
+                hash_after=hash_after,
+                version=self._constitution_version,
+                reason=(
+                    f"Ratified by '{ratifier_id}' "
+                    f"({ratifier_level.name if ratifier_level else 'unregistered'}); "
+                    f"required {required.name}; identity {identity_assurance}."
+                ),
+            )
+        except Exception:
+            # Roll back state, version, and the amendment lifecycle fields so a
+            # ledger-write (or apply) failure is fully undone and the proposal
+            # stays PENDING for a later retry.
+            self._restore_state(backup)
+            self._constitution_version = prior_version
+            amendment.status = "PENDING"
+            amendment.ratified_at = None
+            amendment.ratified_by = None
+            amendment.decision = None
+            raise
+
+        if self._on_amendment_ratified is not None:
+            self._on_amendment_ratified(amendment.to_dict())
+        return True
 
     @property
     def amendment_log(self) -> list[dict[str, Any]]:
-        """Full history of all proposed and ratified amendments."""
+        """Full history of all proposed amendments (with their decision record)."""
         return [a.to_dict() for a in self._amendments]
+
+    @property
+    def amendment_records(self) -> list[dict[str, Any]]:
+        """
+        Durable, audit-grade decision records (RATIFIED and REJECTED), oldest
+        first. Sourced from the pluggable amendment store, so this survives
+        process restarts when a durable store (e.g. ``SqliteAmendmentStore``) is
+        configured.
+        """
+        return self._amendment_store.all()
+
+    def _reconstruct_version(self) -> int:
+        """
+        Reconstruct the monotonic version from the durable amendment store.
+
+        Returns the maximum ``constitution_version`` across all persisted
+        RATIFIED records. An empty / never-written store legitimately yields 0
+        (a fresh constitution starts at version 0), so the version survives a
+        process restart when a durable store is configured: a new Constitution
+        built on the same store resumes where the last one left off.
+
+        This is fail-CLOSED for integrity, NOT fail-open. If a *configured* store
+        is unreadable, or a persisted RATIFIED record carries a malformed
+        ``constitution_version``, this raises :class:`ConstitutionIntegrityError`
+        rather than reset the counter to 0 — resetting could reissue an existing
+        version number. A corrupt/unreadable ledger must stop startup until it is
+        repaired or replaced.
+
+        NOTE: this restores ONLY the monotonic version counter. It does NOT
+        restore the governing configuration, authority registry, hard
+        constraints, or pending proposals — those must be reloaded from their own
+        source and verified against the last ``constitution_hash_after``.
+        """
+        try:
+            records = self._amendment_store.all()
+        except Exception as exc:
+            raise ConstitutionIntegrityError(
+                "Amendment store is configured but unreadable; refusing to reset "
+                "the monotonic version counter to 0 (that would risk reissuing "
+                "existing version numbers). Repair or replace the store first."
+            ) from exc
+        best = 0
+        for rec in records or []:
+            if str(rec.get("outcome", "")).upper() != "RATIFIED":
+                continue
+            raw: Any = rec.get("constitution_version")
+            # A RATIFIED record MUST carry a positive, non-boolean integer version.
+            # int(raw) would silently coerce malformed values (True->1, 1.5->1,
+            # "0"->0) and negatives/zero are impossible for a ratified record
+            # (ratification bumps a 0-based counter to >= 1) — any of these could
+            # mis-count the max and reissue an existing version. Reject them.
+            if not isinstance(raw, int) or isinstance(raw, bool) or raw <= 0:
+                raise ConstitutionIntegrityError(
+                    f"RATIFIED amendment record "
+                    f"{rec.get('amendment_id', '<unknown>')!r} has a malformed "
+                    f"constitution_version ({raw!r}); expected a positive integer. "
+                    "The durable ledger is internally inconsistent; refusing to "
+                    "reconstruct the version counter from a corrupt record."
+                )
+            if raw > best:
+                best = raw
+        return best
+
+    @property
+    def constitution_version(self) -> int:
+        """Monotonic version, incremented on each successful ratification.
+
+        Restored from the durable amendment store at construction (the max
+        version across persisted RATIFIED records), so it survives process
+        restarts when a durable store (e.g. ``SqliteAmendmentStore``) is
+        configured; with the default in-memory store it starts at 0.
+
+        Restart recovery restores ONLY this monotonic counter — NOT the governing
+        configuration, authority registry, hard constraints, or pending
+        proposals. Deployers must reload that governed state from its own source
+        and verify it against the last record's ``constitution_hash_after``; do
+        not assume the amendment store recovers the full constitution.
+        """
+        return self._constitution_version
+
+    @property
+    def authority_registry(self) -> Optional[dict[str, int]]:
+        """Current authority registry snapshot, or None in legacy mode."""
+        return self._authority.snapshot() if self._authority else None
 
     @property
     def evaluation_count(self) -> int:
         """Number of evaluate() calls made with this constitution."""
         return len(self._evaluation_history)
 
-    def fria_evidence(self, context: dict[str, Any]) -> "list[Any]":
-        """Generate FRIA evidence from a governance evaluation.
+    # ------------------------------------------------------------------
+    # Amendment authority helpers
+    # ------------------------------------------------------------------
 
-        Evaluates all gates and hard constraints against the provided
-        context, then maps results to EU AI Act Article 27 FRIA categories.
-
-        Args:
-            context: Dict of metric values (same as evaluate()).
-
-        Returns:
-            List of FRIAEvidence, one per FRIA category (always 6).
+    @staticmethod
+    def _affected_paths(changes: Optional[dict[str, Any]]) -> list[str]:
         """
-        from constitutional_agent.fria import generate_fria_evidence
+        Derive the dotted configuration paths a change payload actually touches.
 
-        # Evaluate gates
+        This is the ground truth used to decide the required authority — the
+        proposer's ``affected_sections`` label is descriptive only and is never
+        trusted for authorization.
+        """
+        if not changes:
+            return []
+        paths: list[str] = []
+
+        def _walk(prefix: str, obj: Any) -> None:
+            if isinstance(obj, dict) and obj:
+                for key, val in obj.items():
+                    child = f"{prefix}.{key}" if prefix else str(key)
+                    _walk(child, val)
+            else:
+                # Leaf (scalar, list, or empty dict) — record the path.
+                if prefix:
+                    paths.append(prefix)
+
+        _walk("", changes)
+        return sorted(set(paths))
+
+    @staticmethod
+    def _touches_registry(affected_paths: list[str]) -> bool:
+        return any(p.split(".")[0] == "authority_registry" for p in affected_paths)
+
+    @staticmethod
+    def _touches_hard_constraints(affected_paths: list[str]) -> bool:
+        return any(p.split(".")[0] == "hard_constraints" for p in affected_paths)
+
+    @classmethod
+    def _required_authority(cls, affected_paths: list[str]) -> AuthorityLevel:
+        """
+        The minimum authority required to ratify a change to these paths.
+
+        Hard-constraint or authority-registry changes require the highest level;
+        everything else is an ordinary amendment.
+        """
+        if cls._touches_hard_constraints(affected_paths) or cls._touches_registry(
+            affected_paths
+        ):
+            return AuthorityLevel.CONSTITUTIONAL_AUTHORITY
+        return AuthorityLevel.RATIFIER
+
+    def _constitution_hash(self) -> str:
+        """
+        Content hash of the governing configuration (excludes the monotonic
+        version, so a document-only amendment leaves the hash unchanged while a
+        real config change alters it).
+        """
+        snapshot = {
+            "config": {
+                k: v for k, v in self._config.items() if k != "authority_registry"
+            },
+            "hard_constraints": sorted(hc.id for hc in self._hard_constraints),
+            "authority_registry": (
+                self._authority.snapshot() if self._authority else None
+            ),
+        }
+        payload = json.dumps(snapshot, sort_keys=True, default=str).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()[:16]
+
+    def _snapshot_state(self) -> dict[str, Any]:
+        """Capture mutable governing state for atomic rollback."""
+        return {
+            "config": copy.deepcopy(self._config),
+            "hard_constraints": list(self._hard_constraints),
+            "authority": self._authority,
+            "evaluator": self._evaluator,
+        }
+
+    def _restore_state(self, backup: dict[str, Any]) -> None:
+        self._config = backup["config"]
+        self._hard_constraints = backup["hard_constraints"]
+        self._authority = backup["authority"]
+        self._evaluator = backup["evaluator"]
+
+    def _apply_amendment_changes(self, changes: dict[str, Any]) -> None:
+        """
+        Apply a ratified change payload to the live constitution.
+
+        Authority-registry and hard-constraint sections are applied through their
+        dedicated paths; all other keys deep-merge into the config and rebuild the
+        evaluator.
+        """
+        registry_change = changes.get("authority_registry")
+        hc_change = changes.get("hard_constraints")
+        other = {
+            k: v
+            for k, v in changes.items()
+            if k not in ("authority_registry", "hard_constraints")
+        }
+
+        if other:
+            self._deep_merge(self._config, other)
+            self._evaluator = self._build_evaluator(self._config)
+
+        if hc_change is not None:
+            # Replace the YAML/amendment-defined layer; builtins always remain.
+            self._config["hard_constraints"] = hc_change
+            self._hard_constraints = list(self._base_hard_constraints)
+            self._hard_constraints.extend(
+                self._parse_yaml_hard_constraints(hc_change)
+            )
+
+        if registry_change is not None:
+            base = self._authority or AuthorityRegistry({})
+            self._authority = base.with_changes(registry_change)
+
+    def _finalize_amendment(
+        self,
+        amendment: AmendmentProposal,
+        *,
+        outcome: str,
+        ratifier_id: str,
+        proposer_level: Optional[AuthorityLevel],
+        ratifier_level: Optional[AuthorityLevel],
+        required: AuthorityLevel,
+        affected_paths: list[str],
+        identity_assurance: str,
+        identity_verifier_name: Optional[str],
+        scrubbed_evidence: Optional[dict[str, Any]],
+        evidence_hash: Optional[str],
+        hash_before: str,
+        hash_after: str,
+        version: int,
+        reason: str,
+    ) -> None:
+        """Build the durable AmendmentRecord, attach it, and persist it."""
+        record = AmendmentRecord(
+            amendment_id=amendment.id,
+            outcome=outcome,
+            proposer_id=amendment.proposed_by,
+            ratifier_id=ratifier_id,
+            proposer_level=proposer_level.name if proposer_level else None,
+            ratifier_level=ratifier_level.name if ratifier_level else None,
+            required_authority=required.name,
+            identity_assurance=identity_assurance,
+            identity_verifier=identity_verifier_name,
+            affected_paths=affected_paths,
+            proposed_at=amendment.proposed_at,
+            decided_at=datetime.now(timezone.utc).isoformat(),
+            evidence=scrubbed_evidence,
+            evidence_hash=evidence_hash,
+            constitution_hash_before=hash_before,
+            constitution_hash_after=hash_after,
+            constitution_version=version,
+            reason=reason,
+            description=amendment.description,
+            # Redact secret-shaped values from the STORED/audit copy of the
+            # change payload. The live ``amendment.changes`` used by
+            # ``_apply_amendment_changes`` is left intact — only this durable
+            # record (and ``amendment.decision``) is redacted, so credentials
+            # embedded in a config change never persist to the ledger.
+            changes=redact_secrets(amendment.changes),
+        )
+        amendment.decision = record.to_dict()
+        self._amendment_store.record(record.to_dict())
+
+    def _fria_inputs(
+        self, context: dict[str, Any]
+    ) -> tuple[list[GateResult], list[dict[str, Any]]]:
+        """Evaluate gates + hard constraints and shape them for FRIA generation."""
         targets_met = bool(context.get("targets_met", False))
         _, gate_results = self._evaluator.evaluate(context, targets_met)
-
-        # Check hard constraints
         hc_results = check_hard_constraints(context, self._hard_constraints)
         hc_violations = [
             {"constraint_id": r.id, "description": r.description, "violated": True}
             for r in hc_results if r.violated
         ]
+        return gate_results, hc_violations
 
+    def fria_evidence(self, context: dict[str, Any]) -> "list[Any]":
+        """Generate the internal governance-evidence categories from an evaluation.
+
+        Evaluates all gates and hard constraints against the provided context,
+        then maps results to the framework's six *internal governance-evidence
+        categories* — these are NOT the EU AI Act Article 27 categories. For the
+        actual Article 27(1) crosswalk (which honestly separates auto-derived
+        evidence from required deployer context) use
+        :meth:`fria_support_package`.
+
+        Args:
+            context: Dict of metric values (same as evaluate()).
+
+        Returns:
+            List of FRIAEvidence, one per internal category (always 6).
+        """
+        from constitutional_agent.fria import generate_fria_evidence
+
+        gate_results, hc_violations = self._fria_inputs(context)
         return generate_fria_evidence(gate_results, hc_violations)
+
+    def fria_support_package(
+        self,
+        context: dict[str, Any],
+        deployer_context: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Generate a FRIA-support package (NOT a complete Article 27 FRIA).
+
+        Combines the internal governance-evidence categories with the EU AI Act
+        Article 27(1) crosswalk. Operational gate evidence is auto-derived where
+        it legitimately can be; elements that require deployer context (intended
+        use, duration/frequency, affected groups, complaint arrangements) are
+        marked as such rather than silently populated.
+
+        Args:
+            context:          Metric values (same as evaluate()).
+            deployer_context: Optional Article 27(1) deployer-supplied context and
+                              legal-review status (see
+                              ``fria.generate_article27_crosswalk``).
+
+        Returns:
+            The structured FRIA-support package dict.
+        """
+        from constitutional_agent.fria import fria_support_package
+
+        gate_results, hc_violations = self._fria_inputs(context)
+        return fria_support_package(gate_results, hc_violations, deployer_context)
 
     def summary_report(self) -> dict[str, Any]:
         """
@@ -552,8 +1173,9 @@ class Constitution:
         Build a SixGateEvaluator from governance.yaml config.
 
         Applies YAML-configured threshold overrides per gate. Missing keys
-        fall back to production-validated defaults. All threshold overrides
-        are additive — you only need to specify values you want to change.
+        fall back to reference defaults derived from HRAO-E (deployment
+        validation required). All threshold overrides are additive — you only
+        need to specify values you want to change.
 
         Gates with ``enabled: false`` in the YAML are replaced with a
         _DisabledGate stub that always returns PASS, so they never block
