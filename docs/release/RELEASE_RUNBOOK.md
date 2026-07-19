@@ -55,7 +55,19 @@ workflow and the artifact published are the same bytes**, and the build is
    the published hashes.
 6. **Verify from PyPI.** In a fresh environment, `pip install constitutional-agent==0.7.0`
    and run `python scripts/release_smoke.py` (or `python -m constitutional_agent`).
-7. **Create the GitHub release** from the tag using the finalized notes.
+7. **Create the GitHub release** from the tag using the finalized notes, and
+   **attach the checksums + validated artifacts** so the release notes' claim
+   ("the SHA-256 checksums are published with the release") is operationally true —
+   `release.yml` only uploads them as *workflow artifacts*, which are not attached
+   to the public release automatically:
+   - From the successful tag-triggered `release.yml` run, download the
+     **`release-checksums`** artifact (`SHA256SUMS.txt`) and the **`release-dist`**
+     artifact (the exact validated `constitutional_agent-0.7.0-py3-none-any.whl`
+     and `constitutional_agent-0.7.0.tar.gz`).
+   - **Attach `SHA256SUMS.txt`** to the public GitHub v0.7.0 release, and attach the
+     exact validated wheel and sdist from `release-dist` as release assets.
+   - **Record the tag commit SHA and the `release.yml` workflow run ID** in the
+     release notes.
 8. **Apply the v0.6 correction notice** — append
    `docs/release/v0.6.0-correction-notice-DRAFT.md` (drop the DRAFT banner) to the
    live v0.6.0 GitHub release **only after** steps 4–6 confirm v0.7.0 is public and
