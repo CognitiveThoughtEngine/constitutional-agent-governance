@@ -52,3 +52,7 @@ MANIFEST
 # OS
 .DS_Store
 Thumbs.db
+
+# any local virtualenv variant (release validation used .venv-rel)
+.venv*/
+venv*/

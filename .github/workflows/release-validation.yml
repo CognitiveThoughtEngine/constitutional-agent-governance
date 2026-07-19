@@ -1,0 +1,121 @@
+name: Release Validation
+
+# Reproducible pre-release gate: quality across the full supported Python matrix,
+# then a clean build + artifact inspection + fresh-environment install smoke test.
+# Does NOT publish — publishing is a separate, manually-authorized release event.
+
+on:
+  push:
+    branches: [master, main, "release/**"]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    name: Quality (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package + dev tooling
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check src/ tests/
+
+      - name: Type check (mypy, strict)
+        run: mypy src/
+
+      - name: Security scan (Bandit)
+        run: |
+          echo "== Bandit full report (all severities — informational) =="
+          bandit -r src/constitutional_agent -f screen || true
+          echo "== Bandit blocking gate (fails on MEDIUM+ severity) =="
+          bandit -r src/constitutional_agent --severity-level medium
+
+      - name: Run tests + coverage
+        run: pytest tests/ -v --tb=short --cov=constitutional_agent --cov-fail-under=95
+
+  package:
+    name: Deterministic build, inspect & clean-install smoke
+    needs: quality
+    runs-on: ubuntu-latest
+    env:
+      # Pinned in lock-step with release.yml so builds are reproducible on this
+      # pinned Ubuntu/Linux platform + toolchain. (Determinism is per-commit: a
+      # different commit or timestamp yields different hashes — the pre-merge
+      # build and the later tag build are NOT expected to be byte-identical.)
+      BUILD_PINS: "build==1.5.0 setuptools==83.0.0 wheel==0.47.0 twine==6.2.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Pin build toolchain
+        run: pip install ${{ env.BUILD_PINS }}
+
+      - name: Deterministic double-build + normalize + compare
+        run: |
+          set -euo pipefail
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct HEAD)"
+          echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+          for n in a b; do
+            rm -rf "/tmp/build-$n"; mkdir -p "/tmp/build-$n"
+            git archive HEAD | tar -x -C "/tmp/build-$n"
+            ( cd "/tmp/build-$n"
+              python -m build --no-isolation
+              python "$GITHUB_WORKSPACE/scripts/normalize_sdist.py" dist/*.tar.gz )
+          done
+          ( cd /tmp/build-a/dist && sha256sum ./*.whl ./*.tar.gz ) | sed 's#\./##' | sort -k2 > /tmp/hash-a.txt
+          ( cd /tmp/build-b/dist && sha256sum ./*.whl ./*.tar.gz ) | sed 's#\./##' | sort -k2 > /tmp/hash-b.txt
+          echo "== build A ==" ; cat /tmp/hash-a.txt
+          echo "== build B ==" ; cat /tmp/hash-b.txt
+          if ! diff -q /tmp/hash-a.txt /tmp/hash-b.txt >/dev/null; then
+            echo "::error::Non-deterministic build — build A and build B differ"; exit 1
+          fi
+          echo "Deterministic: build A SHA-256 == build B SHA-256"
+          # Promote build A as the canonical dist (validated == what would publish).
+          cp -r /tmp/build-a/dist "$GITHUB_WORKSPACE/dist"
+
+      - name: twine check
+        run: python -m twine check dist/*.whl dist/*.tar.gz
+
+      - name: Enforce metadata + archive contents
+        run: python scripts/check_package.py dist
+
+      - name: SHA-256 checksums
+        run: cd dist && sha256sum *.whl *.tar.gz | tee SHA256SUMS.txt
+
+      - name: Clean-environment install of the built wheel
+        run: |
+          python -m venv /tmp/fresh
+          /tmp/fresh/bin/python -m pip install --upgrade pip
+          /tmp/fresh/bin/python -m pip install dist/*.whl
+
+      - name: Release smoke test (installed wheel, not source)
+        run: |
+          cp scripts/release_smoke.py /tmp/release_smoke.py
+          cd /tmp && /tmp/fresh/bin/python /tmp/release_smoke.py
+
+      - name: Upload artifacts + checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-v0.7.0
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+          if-no-files-found: error

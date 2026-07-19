@@ -361,7 +361,7 @@ protocol — all checks fail-closed:
   affected configuration paths**, never from a proposer-supplied label.
 - **Last-authority guard:** a registry change can never remove or demote the final
   `CONSTITUTIONAL_AUTHORITY` — the system is never left with zero root authorities.
-- **Durable, audit-grade record** for every decision (RATIFIED *and* REJECTED):
+- **Durable, audit-oriented record** for every decision (RATIFIED *and* REJECTED):
   proposer/ratifier ids + their levels, required authority, identity-assurance
   mode, actual affected paths, before/after constitution hashes, a monotonic
   version, and evidence retained scrubbed + by SHA-256 hash. Values under
@@ -572,7 +572,7 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 This library is a portable extract from the HRAO-E Constitutional Framework — a production reference implementation of constitutional governance.
 
 **This library (verifiable from this repo):**
-- **243 test functions** across 6 test modules (253 collected cases), 0 failed
+- **243 test functions** across the six library test modules (253 collected cases), 0 failed
 - **12 hard constraints** (HC-1 through HC-12) enforced in code
 - **6 constitutional gates** (EG, RG, GG, EPG, AAG, CGG)
 - **Enforced amendment protocol** — separation of duties + authority levels + last-authority guard, with a durable audit record

@@ -30,5 +30,12 @@ jobs:
       - name: Type check (mypy)
         run: mypy src/
 
+      - name: Security scan (Bandit)
+        run: |
+          echo "== Bandit full report (all severities — informational) =="
+          bandit -r src/constitutional_agent -f screen || true
+          echo "== Bandit blocking gate (fails the build on MEDIUM+ severity) =="
+          bandit -r src/constitutional_agent --severity-level medium
+
       - name: Run tests
         run: pytest tests/ -v --tb=short --cov=constitutional_agent --cov-fail-under=95

@@ -13,7 +13,7 @@ uses to enforce the protocol:
 - :class:`AuthorityRegistry` — a stable ``principal_id -> AuthorityLevel`` map.
   ``principal_id`` is an opaque, stable identifier (a subject claim, a service
   account id, a key fingerprint) — **not** a human-readable display name.
-- :class:`AmendmentRecord` — the durable, audit-grade record of a ratification
+- :class:`AmendmentRecord` — the durable, audit-oriented record of a ratification
   or rejection decision.
 - :class:`AmendmentStore` / :class:`InMemoryAmendmentStore` /
   :class:`SqliteAmendmentStore` — pluggable persistence for the amendment log,
@@ -404,7 +404,7 @@ def scrub_evidence(
 @dataclass
 class AmendmentRecord:
     """
-    Durable, audit-grade record of a single amendment decision.
+    Durable, audit-oriented record of a single amendment decision.
 
     Preserves who proposed and who ratified/rejected, their authority levels *at
     the moment of decision*, how the ratifier's identity was assured, the ACTUAL

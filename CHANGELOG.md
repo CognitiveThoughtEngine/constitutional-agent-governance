@@ -7,7 +7,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [0.7.0] - 2026-07-18
+## [0.7.0] - UNRELEASED
 
 Turns the governance thesis from *recorded* into *enforced*: the amendment
 protocol now authorizes ratifications instead of accepting an unverified string,
@@ -23,14 +23,22 @@ reconciled to figures traceable to this repository.
 - **`IdentityVerifier`** — optional deployer-supplied authentication callback that
   binds an asserted principal to an external IdP (Entra / Okta / IAM / mTLS / a
   signed token). It may only add restriction; it can never bypass separation of
-  duty or authority-level rules. Callback failure, exception, timeout, or a
-  malformed (non-`True`) response all **fail closed**.
+  duty or authority-level rules. A callback that raises, or returns any
+  non-`True` value, **fails closed**. The raw verifier does **not** itself impose a
+  timeout and cannot interrupt a callback that blocks or hangs — bounding the wait
+  is opt-in via `bounded_verifier` (best-effort; see pre-merge correction 6 below).
 - **`AmendmentRecord` + pluggable `AmendmentStore`** (`InMemoryAmendmentStore`,
-  durable `SqliteAmendmentStore`) — an audit-grade, monotonically-versioned log of
+  durable `SqliteAmendmentStore`) — an audit-oriented, monotonically-versioned log of
   every RATIFIED and REJECTED decision, capturing proposer/ratifier ids and levels
   at decision time, identity-assurance mode, the ACTUAL affected paths,
   before/after constitution hashes, and evidence retained scrubbed + by SHA-256
-  hash. **Credentials, tokens, and secrets are never stored** (`scrub_evidence`).
+  hash. Before persistence, values under a **recognized secret-shaped key name**
+  (`password`, `api_key`/`apikey`, `token`, `secret`, `credential`, `authorization`,
+  `bearer`, `private`, `signature`, `session`, `cookie`, `otp`, `pin`, `ssn`, or any
+  key containing `key`/`auth`) are replaced with `[REDACTED]` (`scrub_evidence` /
+  `redact_secrets`). This is a **key-name heuristic, not secret detection**: a secret
+  stored under a non-matching key, or embedded in free text, is not caught — which is
+  why raw evidence is additionally retained only by SHA-256 hash, never verbatim.
 
 ### Changed — `Constitution.ratify_amendment` is now enforced (BREAKING)
 
@@ -78,9 +86,9 @@ reconciled to figures traceable to this repository.
 - Qualified the additive risk example so it no longer implies risk sums linearly.
 - Corrected the mislabeled "1,929 governance evaluations" (it was a test-function
   count, not evaluations) and dropped un-traceable production counts. Library
-  figures are now the real ones from this repo: **218 test functions across 6
-  modules** (223 collected), **12 hard constraints**, **6 gates**, **0** built-in
-  ratified amendments.
+  figures are now the real ones from this repo: **243 test functions across the
+  six library test modules** (253 collected), **12 hard constraints**, **6 gates**,
+  **0** built-in ratified amendments.
 - "Cited in NIST AI 800-2 submissions" → "informed three public-comment
   submissions concerning NIST AI 800-2 (CAISI acknowledged receipt)."
 
@@ -131,10 +139,16 @@ New exports: `redact_secrets`, `bounded_verifier`, `Article27Applicability`.
 
 ### Tests
 
-- +44 tests: `test_amendment_authority.py` (enforcement paths + reviewer edge
-  cases) and `test_fria_article27.py`. Pre-merge corrections add **+21** regression
-  tests (17 in `test_amendment_authority.py`, 4 in `test_fria_article27.py`).
-  Full suite: **244 passing**.
+- v0.7.0 adds **69 test functions** across two new modules —
+  `test_amendment_authority.py` (55) and `test_fria_article27.py` (14) —
+  reconciled by review round: **+44** initial (34 authority + 10 Article 27),
+  **+21** pre-merge corrections (17 authority + 4 Article 27), **+3** re-review
+  round 1 (atomic rejection persistence + fail-closed version reconstruction),
+  **+1** re-review round 2 (stricter version validation). 44 + 21 + 3 + 1 = **69**.
+- Suite total: **174** (v0.6.0) + 69 = **243 test functions**, **253 collected and
+  all passing** on Python 3.11, 3.12, and 3.13 (the six library test modules).
+- Release-tooling tests for the packaging checker (`tests/test_package_check.py`)
+  are additional and are not counted in the library figure above.
 
 ---
 
@@ -143,10 +157,15 @@ New exports: `redact_secrets`, `bounded_verifier`, `Article27Applicability`.
 ### Added — Cross-Session Risk Composition (the stateful layer)
 
 The six gates are memoryless: each `evaluate()` scores one decision and forgets
-it. Every vendor-neutral governance engine shipped in H1 2026 (Microsoft ACS,
-Galileo Agent Control, Runlayer, NVIDIA OpenShell) is stateless the same way —
-and shares the same blind spot: an agent can pass every individual gate and
-still be dangerous over a sequence. This release adds the layer that remembers.
+it — an agent can pass every individual gate and still be dangerous over a
+sequence. In a **documentation review conducted July 2026** of four vendor-neutral
+governance products (Microsoft Agent Governance Toolkit, Galileo Agent Control,
+Runlayer, NVIDIA NeMo Guardrails / OpenShell), a durable **cross-session
+decision-risk accumulation** primitive was **not surfaced in the documentation
+reviewed** — the nearest surfaced mechanism, NeMo dialog rails, tracks cumulative
+*conversational* context within a dialog, not a cross-session decision-risk budget.
+This is a bounded review of public documentation, not a claim of global novelty.
+This release adds the layer that remembers.
 
 - **`composition` module** — accumulates a scalar risk weight per decision,
   keyed by subject, and composes it across a rolling window. Escalates the

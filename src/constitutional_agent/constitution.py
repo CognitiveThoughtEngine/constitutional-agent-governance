@@ -158,7 +158,7 @@ class AmendmentProposal:
         self.ratified_at: Optional[str] = None
         self.ratified_by: Optional[str] = None
         self.changes: Optional[dict[str, Any]] = changes
-        # Populated once a ratify/reject decision is made (audit-grade record).
+        # Populated once a ratify/reject decision is made (audit-oriented record).
         self.decision: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -661,7 +661,14 @@ class Constitution:
                     "root governance changes."
                 )
         else:
-            assert self._authority is not None  # narrow for type-checkers
+            # Non-legacy path ⇒ an authority registry is present by construction.
+            # Fail closed (not `assert`, which `python -O` strips) if that
+            # invariant is ever violated, and narrow the type for the checker.
+            if self._authority is None:  # pragma: no cover - unreachable guard
+                raise ConstitutionIntegrityError(
+                    "Non-legacy ratification path reached with no authority "
+                    "registry configured."
+                )
             # 3. Ratifier must be registered.
             if ratifier_level is None:
                 reject = (
@@ -819,7 +826,7 @@ class Constitution:
     @property
     def amendment_records(self) -> list[dict[str, Any]]:
         """
-        Durable, audit-grade decision records (RATIFIED and REJECTED), oldest
+        Durable, audit-oriented decision records (RATIFIED and REJECTED), oldest
         first. Sourced from the pluggable amendment store, so this survives
         process restarts when a durable store (e.g. ``SqliteAmendmentStore``) is
         configured.

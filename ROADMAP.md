@@ -49,10 +49,12 @@ The core design question is whether Coalition governance should be pull-based (e
 
 ## v0.6.0 — Cross-Session Risk Composition (stable — 2026-07-16)
 
-The differentiator. Every other vendor-neutral governance engine is stateless /
-per-intervention; this release adds the layer that composes accumulated risk
-across decisions and sessions, catching the failure mode where an agent passes
-every individual gate but the trajectory does not.
+The differentiator. In a July 2026 review of four vendor-neutral governance
+products, a durable cross-session decision-risk accumulation primitive was not
+surfaced in the documentation reviewed (a bounded doc review, not a global-novelty
+claim); this release adds the layer that composes accumulated risk across decisions
+and sessions, catching the failure mode where an agent passes every individual gate
+but the trajectory does not.
 
 ### Shipped
 
