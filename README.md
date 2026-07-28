@@ -9,6 +9,13 @@
 
 Your agent is authenticated (**WHO**) and inside its permissions (**HOW**). This library answers the question those layers can't: **is the _authorized_ action _sound_ — given its constitution, six gates, and twelve hard constraints — evaluated before it commits?**
 
+<p align="center">
+  <a href="https://youtu.be/vsNO-_HfDF8">
+    <img src="https://img.youtube.com/vi/vsNO-_HfDF8/maxresdefault.jpg" alt="Three authorized actions compose past the risk budget — a 60-second proof" width="640">
+  </a>
+  <br><b><a href="https://youtu.be/vsNO-_HfDF8">▶ Watch the 60-second proof</a></b> — three individually-authorized actions compose past the risk budget → <code>HOLD</code>. Verified output; configured demonstration.
+</p>
+
 Extracted from HRAO-E, a production reference implementation of constitutional governance. Informed three public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt). Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
 
 > **Maturity, honestly:** the six gates, execution states, and twelve hard constraints have shipped since v0.4; EU AI Act Article 27(1) FRIA-support evidence (a support package, not a complete FRIA) and an enforced amendment-authority protocol are current. Stateful _cross-session cumulative-risk composition_ — catching that specific aggregate — **shipped in v0.6.0** (the `composition` module; see below). It is new: exercised in unit tests and modeled on the measured AgentCore gap, but not yet hardened across as many production-days as the core gates.
