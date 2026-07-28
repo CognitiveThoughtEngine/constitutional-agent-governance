@@ -13,7 +13,7 @@ Your agent is authenticated (**WHO**) and inside its permissions (**HOW**). This
   <a href="https://youtu.be/vsNO-_HfDF8">
     <img src="https://img.youtube.com/vi/vsNO-_HfDF8/maxresdefault.jpg" alt="Three authorized actions compose past the risk budget — a 60-second proof" width="640">
   </a>
-  <br><b><a href="https://youtu.be/vsNO-_HfDF8">▶ Watch the 60-second proof</a></b> — three individually-authorized actions compose past the risk budget → <code>HOLD</code>. Verified output; configured demonstration.
+  <br><b><a href="https://youtu.be/vsNO-_HfDF8">▶ Watch the 60-second proof</a></b> — three individually-authorized actions compose to <code>HOLD</code> at the first threshold (a longer sequence escalates to <code>FREEZE</code>, as in the example below). Verified output; configured demonstration.
 </p>
 
 Extracted from HRAO-E, a production reference implementation of constitutional governance. Informed three public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt). Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
