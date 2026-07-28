@@ -61,17 +61,17 @@ evaluator = ComposedEvaluator(
     composer=AccumulatedRiskComposer(store=SqliteRiskStore("risk.db")),
 )
 
-# Each decision clears the per-call HOLD, but the accumulation is tracked
-# against a cumulative-risk budget (risk does NOT simply sum linearly — the
-# composer applies its own weighting/decay; see the composition module).
-decision = {"misuse_risk_index": 0.5, "runway_months": 10, "lessons_learned_weekly": 3}
+# `decision` passes every one of the six gates on its own (per-call RUN) — use the
+# healthy metrics dict from the Quick Start below. Each such decision still carries a
+# real risk weight (here 0.6); the composer accumulates those across the session and
+# escalates when the trajectory crosses the cumulative-risk budget.
 for _ in range(7):
-    result = evaluator.evaluate(decision, subject="pricing-agent")
+    result = evaluator.evaluate(decision, subject="pricing-agent", risk_weight=0.6)
 
-print(result.per_call_state.value)  # RUN   — the six gates see nothing wrong
-print(result.system_state.value)    # FREEZE — the trajectory crossed the budget
-print(result.escalated)             # True
-print(result.composition.reason)    # cites the accumulated-risk threshold + evidence
+print(result.per_call_state.value)  # RUN    — each decision passed all six gates
+print(result.system_state.value)    # FREEZE — the accumulated risk crossed the budget
+print(result.escalated)             # True   — composition escalated beyond the per-call verdict
+print(result.composition.reason)    # "Accumulated risk 4.20 >= FAIL threshold 3.50 across 7 decisions..."
 ```
 
 This is the WHY layer's stateful edge: WHO governs identity, HOW governs each
