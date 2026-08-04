@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 
 class GateState(str, Enum):
@@ -64,7 +64,7 @@ class GateResult:
     gate: str
     state: GateState
     reason: str
-    metric: Optional[float] = None
+    metric: float | None = None
     context: dict[str, Any] = field(default_factory=dict)
 
 
@@ -106,7 +106,7 @@ class ConstitutionResult:
     system_state: SystemState
     gate_results: list[GateResult] = field(default_factory=list)
     hard_constraint_violations: list[HardConstraintViolation] = field(default_factory=list)
-    blocking_gate: Optional[GateResult] = None
+    blocking_gate: GateResult | None = None
     blocking_gates: list[GateResult] = field(default_factory=list)
     hold_gates: list[GateResult] = field(default_factory=list)
     targets_met: bool = False

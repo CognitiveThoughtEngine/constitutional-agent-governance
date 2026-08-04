@@ -33,21 +33,13 @@ import json
 import threading
 import uuid
 import warnings
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 import yaml
 
-from constitutional_agent.gates import (
-    AutonomyGate,
-    ConstitutionalGate,
-    EconomicGate,
-    EpistemicGate,
-    GovernanceGate,
-    RiskGate,
-    SixGateEvaluator,
-)
 from constitutional_agent.authority import (
     AmendmentRecord,
     AmendmentStore,
@@ -58,6 +50,15 @@ from constitutional_agent.authority import (
     canonical_principal,
     redact_secrets,
     scrub_evidence,
+)
+from constitutional_agent.gates import (
+    AutonomyGate,
+    ConstitutionalGate,
+    EconomicGate,
+    EpistemicGate,
+    GovernanceGate,
+    RiskGate,
+    SixGateEvaluator,
 )
 from constitutional_agent.hard_constraints import (
     BUILTIN_HARD_CONSTRAINTS,
@@ -146,20 +147,20 @@ class AmendmentProposal:
         rationale: str,
         affected_sections: list[str],
         proposed_by: str = "agent",
-        changes: Optional[dict[str, Any]] = None,
+        changes: dict[str, Any] | None = None,
     ) -> None:
         self.id = f"AMEND-{uuid.uuid4().hex[:8].upper()}"
         self.description = description
         self.rationale = rationale
         self.affected_sections = affected_sections
         self.proposed_by = proposed_by
-        self.proposed_at = datetime.now(timezone.utc).isoformat()
+        self.proposed_at = datetime.now(UTC).isoformat()
         self.status = "PENDING"
-        self.ratified_at: Optional[str] = None
-        self.ratified_by: Optional[str] = None
-        self.changes: Optional[dict[str, Any]] = changes
+        self.ratified_at: str | None = None
+        self.ratified_by: str | None = None
+        self.changes: dict[str, Any] | None = changes
         # Populated once a ratify/reject decision is made (audit-oriented record).
-        self.decision: Optional[dict[str, Any]] = None
+        self.decision: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -237,14 +238,14 @@ class Constitution:
     def __init__(
         self,
         config: dict[str, Any],
-        evaluator: Optional[SixGateEvaluator] = None,
-        hard_constraints: Optional[list[HardConstraint]] = None,
+        evaluator: SixGateEvaluator | None = None,
+        hard_constraints: list[HardConstraint] | None = None,
         strict_mode: bool = False,
-        on_evaluate: Optional[Callable[["ConstitutionResult"], None]] = None,
-        on_amendment_ratified: Optional[Callable[[dict[str, Any]], None]] = None,
-        authority_registry: Optional[dict[str, Any] | AuthorityRegistry] = None,
-        identity_verifier: Optional[IdentityVerifier] = None,
-        amendment_store: Optional[AmendmentStore] = None,
+        on_evaluate: Callable[[ConstitutionResult], None] | None = None,
+        on_amendment_ratified: Callable[[dict[str, Any]], None] | None = None,
+        authority_registry: dict[str, Any] | AuthorityRegistry | None = None,
+        identity_verifier: IdentityVerifier | None = None,
+        amendment_store: AmendmentStore | None = None,
     ) -> None:
         self._config = config
         self._evaluator = evaluator or self._build_evaluator(config)
@@ -273,14 +274,14 @@ class Constitution:
         # is configured, the constitution runs in a legacy (unauthenticated)
         # amendment mode — separation of duty is still enforced, but any change
         # touching hard constraints or the registry itself is refused fail-closed.
-        reg_source: Optional[dict[str, Any] | AuthorityRegistry]
+        reg_source: dict[str, Any] | AuthorityRegistry | None
         reg_source = (
             authority_registry
             if authority_registry is not None
             else config.get("authority_registry")
         )
         if reg_source is None:
-            self._authority: Optional[AuthorityRegistry] = None
+            self._authority: AuthorityRegistry | None = None
         elif isinstance(reg_source, AuthorityRegistry):
             self._authority = reg_source
         else:
@@ -308,7 +309,7 @@ class Constitution:
         self._ratify_lock = threading.RLock()
 
     @classmethod
-    def load(cls, path: str | Path) -> "Constitution":
+    def load(cls, path: str | Path) -> Constitution:
         """
         Load a Constitution from a governance.yaml file.
 
@@ -337,14 +338,16 @@ class Constitution:
             config = yaml.safe_load(f)
 
         if not isinstance(config, dict):
-            raise ValueError(
+            # ValueError, not TypeError (ruff TRY004): changing the exception type is a
+            # breaking change for published-package consumers already catching ValueError.
+            raise ValueError(  # noqa: TRY004
                 f"governance.yaml must be a YAML mapping, got {type(config).__name__}"
             )
 
         return cls(config=config)
 
     @classmethod
-    def from_defaults(cls) -> "Constitution":
+    def from_defaults(cls) -> Constitution:
         """
         Create a Constitution with default built-in configuration.
 
@@ -362,8 +365,8 @@ class Constitution:
         context: dict[str, Any],
         raise_on_hc_violation: bool = False,
         dry_run: bool = False,
-        strict_mode: Optional[bool] = None,
-    ) -> "ConstitutionResult":
+        strict_mode: bool | None = None,
+    ) -> ConstitutionResult:
         """
         Evaluate all gates and hard constraints against the provided context.
 
@@ -493,7 +496,7 @@ class Constitution:
         rationale: str,
         affected_sections: list[str],
         proposed_by: str = "agent",
-        changes: Optional[dict[str, Any]] = None,
+        changes: dict[str, Any] | None = None,
     ) -> str:
         """
         Propose a constitutional amendment.
@@ -530,9 +533,9 @@ class Constitution:
         self,
         amendment_id: str,
         ratified_by: str,
-        evidence: Optional[dict[str, Any]] = None,
+        evidence: dict[str, Any] | None = None,
         *,
-        asserted_identity: Optional[dict[str, Any]] = None,
+        asserted_identity: dict[str, Any] | None = None,
     ) -> bool:
         """
         Ratify a pending constitutional amendment, enforcing the authority
@@ -598,9 +601,9 @@ class Constitution:
         self,
         amendment_id: str,
         ratified_by: str,
-        evidence: Optional[dict[str, Any]] = None,
+        evidence: dict[str, Any] | None = None,
         *,
-        asserted_identity: Optional[dict[str, Any]] = None,
+        asserted_identity: dict[str, Any] | None = None,
     ) -> bool:
         """Ratification body, executed while holding ``_ratify_lock``.
 
@@ -638,7 +641,7 @@ class Constitution:
         )
 
         # --- Authorization checks (fail-closed) -----------------------------
-        reject: Optional[str] = None
+        reject: str | None = None
 
         # 1. Separation of duty — always enforced, even in legacy mode. Compared
         #    on the canonical principal id so whitespace/case variants of the same
@@ -698,7 +701,7 @@ class Constitution:
 
         # 6. Identity verification callback (only reached if policy passed).
         identity_assurance = "caller_asserted"
-        identity_verifier_name: Optional[str] = None
+        identity_verifier_name: str | None = None
         if reject is None and self._identity_verifier is not None:
             try:
                 raw = self._identity_verifier.verify(ratifier_id, asserted_identity)
@@ -706,7 +709,7 @@ class Constitution:
                 # response (None, a truthy non-bool, a dict, a numeric 1, a string)
                 # fails closed rather than being coerced to a pass.
                 verified = raw is True
-            except Exception:
+            except Exception:  # noqa: BLE001 — deliberately broad, see fail-closed note below
                 # Fail-closed when the verifier RAISES (including a TimeoutError
                 # it raises itself). NOTE: this cannot interrupt a callback that
                 # blocks/hangs — Python cannot preempt a running call. A verifier
@@ -777,7 +780,7 @@ class Constitution:
             # Bump monotonic version only after changes succeed.
             self._constitution_version += 1
             amendment.status = "RATIFIED"
-            amendment.ratified_at = datetime.now(timezone.utc).isoformat()
+            amendment.ratified_at = datetime.now(UTC).isoformat()
             amendment.ratified_by = ratifier_id
             hash_after = self._constitution_hash()
 
@@ -881,8 +884,7 @@ class Constitution:
                     "The durable ledger is internally inconsistent; refusing to "
                     "reconstruct the version counter from a corrupt record."
                 )
-            if raw > best:
-                best = raw
+            best = max(best, raw)
         return best
 
     @property
@@ -903,7 +905,7 @@ class Constitution:
         return self._constitution_version
 
     @property
-    def authority_registry(self) -> Optional[dict[str, int]]:
+    def authority_registry(self) -> dict[str, int] | None:
         """Current authority registry snapshot, or None in legacy mode."""
         return self._authority.snapshot() if self._authority else None
 
@@ -917,7 +919,7 @@ class Constitution:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _affected_paths(changes: Optional[dict[str, Any]]) -> list[str]:
+    def _affected_paths(changes: dict[str, Any] | None) -> list[str]:
         """
         Derive the dotted configuration paths a change payload actually touches.
 
@@ -1035,14 +1037,14 @@ class Constitution:
         *,
         outcome: str,
         ratifier_id: str,
-        proposer_level: Optional[AuthorityLevel],
-        ratifier_level: Optional[AuthorityLevel],
+        proposer_level: AuthorityLevel | None,
+        ratifier_level: AuthorityLevel | None,
         required: AuthorityLevel,
         affected_paths: list[str],
         identity_assurance: str,
-        identity_verifier_name: Optional[str],
-        scrubbed_evidence: Optional[dict[str, Any]],
-        evidence_hash: Optional[str],
+        identity_verifier_name: str | None,
+        scrubbed_evidence: dict[str, Any] | None,
+        evidence_hash: str | None,
         hash_before: str,
         hash_after: str,
         version: int,
@@ -1061,7 +1063,7 @@ class Constitution:
             identity_verifier=identity_verifier_name,
             affected_paths=affected_paths,
             proposed_at=amendment.proposed_at,
-            decided_at=datetime.now(timezone.utc).isoformat(),
+            decided_at=datetime.now(UTC).isoformat(),
             evidence=scrubbed_evidence,
             evidence_hash=evidence_hash,
             constitution_hash_before=hash_before,
@@ -1092,7 +1094,7 @@ class Constitution:
         ]
         return gate_results, hc_violations
 
-    def fria_evidence(self, context: dict[str, Any]) -> "list[Any]":
+    def fria_evidence(self, context: dict[str, Any]) -> list[Any]:
         """Generate the internal governance-evidence categories from an evaluation.
 
         Evaluates all gates and hard constraints against the provided context,
@@ -1116,7 +1118,7 @@ class Constitution:
     def fria_support_package(
         self,
         context: dict[str, Any],
-        deployer_context: Optional[dict[str, Any]] = None,
+        deployer_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Generate a FRIA-support package (NOT a complete Article 27 FRIA).
 
@@ -1304,9 +1306,9 @@ class Constitution:
     @staticmethod
     def _build_summary(
         system_state: SystemState,
-        blocking: Optional[GateResult],
+        blocking: GateResult | None,
         holds: list[GateResult],
-        all_blocking: Optional[list[GateResult]] = None,
+        all_blocking: list[GateResult] | None = None,
     ) -> str:
         if system_state == SystemState.COMPOUND:
             return "COMPOUND — All gates PASS, all stretch targets met. Maximum growth mode."
@@ -1328,7 +1330,7 @@ class Constitution:
         return f"{system_state.value} — Evaluate manually."
 
     def _record_evaluation(
-        self, context: dict[str, Any], result: "ConstitutionResult"
+        self, context: dict[str, Any], result: ConstitutionResult
     ) -> None:
         """Record evaluation for audit history and call persistence hook if set."""
         # Hash the context for deduplication without storing sensitive values
@@ -1337,7 +1339,7 @@ class Constitution:
         ).hexdigest()[:16]
 
         self._evaluation_history.append({
-            "evaluated_at": datetime.now(timezone.utc).isoformat(),
+            "evaluated_at": datetime.now(UTC).isoformat(),
             "system_state": result.system_state.value,
             "context_hash": ctx_hash,
             "hc_violations": len(result.hard_constraint_violations),

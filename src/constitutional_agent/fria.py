@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from constitutional_agent.schema import GateResult, GateState
 
@@ -175,7 +175,7 @@ def generate_fria_evidence(
         has_gate_data = False
         gate_passing = True
         for gate_name in mapping["gates"]:
-            gr_opt: Optional[GateResult] = gate_index.get(gate_name)
+            gr_opt: GateResult | None = gate_index.get(gate_name)
             if gr_opt:
                 gr = gr_opt
                 has_gate_data = True
@@ -520,7 +520,7 @@ class Article27Crosswalk:
     source: EvidenceSource
     legal_review: LegalReviewStatus = LegalReviewStatus.NOT_REVIEWED
     operational_evidence: list[dict[str, Any]] = field(default_factory=list)
-    deployer_context: Optional[Any] = None
+    deployer_context: Any | None = None
     narrative: str = ""
     recommendations: list[str] = field(default_factory=list)
 
@@ -551,7 +551,7 @@ def _coerce_legal_status(value: Any) -> LegalReviewStatus:
 def generate_article27_crosswalk(
     gate_results: list[GateResult],
     hc_violations: list[dict[str, Any]],
-    deployer_context: Optional[dict[str, Any]] = None,
+    deployer_context: dict[str, Any] | None = None,
 ) -> list[Article27Crosswalk]:
     """Build the EU AI Act Article 27(1) crosswalk.
 
@@ -675,7 +675,7 @@ def generate_article27_crosswalk(
 def fria_support_package(
     gate_results: list[GateResult],
     hc_violations: list[dict[str, Any]],
-    deployer_context: Optional[dict[str, Any]] = None,
+    deployer_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the complete FRIA-support package.
 

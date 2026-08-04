@@ -10,8 +10,8 @@ from constitutional_agent.gates import (
     RiskGate,
     SixGateEvaluator,
 )
-from constitutional_agent.schema import GateState, SystemState
 from constitutional_agent.hard_constraints import check_hard_constraints
+from constitutional_agent.schema import GateState, SystemState
 
 # ---------------------------------------------------------------------------
 # Shared fixture: a healthy pre-revenue system
@@ -35,7 +35,7 @@ HEALTHY = {
 # ---------------------------------------------------------------------------
 
 def test_healthy_system_returns_run_or_throttle():
-    state, results = SixGateEvaluator().evaluate(HEALTHY)
+    state, _results = SixGateEvaluator().evaluate(HEALTHY)
     assert state in (SystemState.RUN, SystemState.THROTTLE, SystemState.COMPOUND)
     assert state != SystemState.FREEZE
 
@@ -91,7 +91,7 @@ def test_zero_learning_triggers_freeze():
 
 def test_low_verification_triggers_hold_or_fail():
     metrics = {**HEALTHY, "verification_pass_rate": 0.55}
-    state, results = SixGateEvaluator().evaluate(metrics)
+    _state, results = SixGateEvaluator().evaluate(metrics)
     eg = next(r for r in results if r.gate == "EpistemicGate")
     assert eg.state in (GateState.HOLD, GateState.FAIL)
 
@@ -473,7 +473,7 @@ def test_agenthustler_broken_wallet_caught_by_hc11():
 def test_agenthustler_strategy_spiral_caught_by_cgg():
     """CGG: zero learning velocity catches the 30-run MCP death spiral."""
     metrics = {**HEALTHY, "lessons_learned_weekly": 0}
-    state, results = SixGateEvaluator().evaluate(metrics)
+    _state, results = SixGateEvaluator().evaluate(metrics)
     cgg = next(r for r in results if r.gate == "ConstitutionalGate")
     assert cgg.state == GateState.FAIL
 

@@ -3,14 +3,18 @@
 Tracks GitHub issue #12.
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from constitutional_agent.schema import GateResult, GateState
 from constitutional_agent.fria import (
-    FRIACategory, generate_fria_evidence, fria_summary, fria_narrative,
+    FRIACategory,
+    fria_narrative,
+    fria_summary,
+    generate_fria_evidence,
 )
+from constitutional_agent.schema import GateResult, GateState
 
 
 def _make_gate(name: str, state: GateState, reason: str = "") -> GateResult:
@@ -133,6 +137,6 @@ if __name__ == "__main__":
             t()
             print(f"  PASS  {t.__name__}")
             passed += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — standalone test runner, must catch any failure to continue
             print(f"  FAIL  {t.__name__}: {e}")
     print(f"\n{passed}/{len(tests)} tests passed.")

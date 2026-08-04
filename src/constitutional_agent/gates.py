@@ -30,7 +30,6 @@ from typing import Any
 
 from constitutional_agent.schema import GateResult, GateState, SystemState
 
-
 # ---------------------------------------------------------------------------
 # Epistemic Gate (EG)
 # ---------------------------------------------------------------------------

@@ -14,7 +14,6 @@ from constitutional_agent.composition import (
 from constitutional_agent.gates import SixGateEvaluator
 from constitutional_agent.schema import GateState, SystemState
 
-
 # A metrics dict that every per-call gate rates healthy (RUN/COMPOUND).
 HEALTHY = {
     "verification_pass_rate": 0.95,

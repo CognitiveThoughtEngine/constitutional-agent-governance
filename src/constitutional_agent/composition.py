@@ -56,21 +56,22 @@ Usage::
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from constitutional_agent.gates import SixGateEvaluator
 from constitutional_agent.schema import GateResult, GateState, SystemState
 
 __all__ = [
-    "RiskEvent",
-    "RiskStore",
-    "InMemoryRiskStore",
-    "SqliteRiskStore",
-    "CompositionResult",
     "AccumulatedRiskComposer",
     "ComposedEvaluator",
     "ComposedSystemResult",
+    "CompositionResult",
+    "InMemoryRiskStore",
+    "RiskEvent",
+    "RiskStore",
+    "SqliteRiskStore",
     "default_risk_weight",
 ]
 
@@ -297,9 +298,9 @@ class AccumulatedRiskComposer:
     def __init__(
         self,
         *,
-        store: Optional[RiskStore] = None,
+        store: RiskStore | None = None,
         window_seconds: float = 86_400.0,
-        half_life_seconds: Optional[float] = None,
+        half_life_seconds: float | None = None,
         hold_threshold: float = 2.0,
         fail_threshold: float = 3.5,
         sustained_count: int = 5,
@@ -328,7 +329,7 @@ class AccumulatedRiskComposer:
         weight: float,
         *,
         source: str = "",
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> RiskEvent:
         """
         Record a risk contribution for ``subject`` and return the stored event.
@@ -537,8 +538,8 @@ class ComposedEvaluator:
     def __init__(
         self,
         *,
-        evaluator: Optional[SixGateEvaluator] = None,
-        composer: Optional[AccumulatedRiskComposer] = None,
+        evaluator: SixGateEvaluator | None = None,
+        composer: AccumulatedRiskComposer | None = None,
         risk_weight_fn: Callable[[dict[str, Any]], float] = default_risk_weight,
     ) -> None:
         self.evaluator = evaluator if evaluator is not None else SixGateEvaluator()
@@ -551,7 +552,7 @@ class ComposedEvaluator:
         *,
         subject: str = "default",
         targets_met: bool = False,
-        risk_weight: Optional[float] = None,
+        risk_weight: float | None = None,
     ) -> ComposedSystemResult:
         """
         Evaluate a decision through the six gates and the composition layer.

@@ -10,7 +10,6 @@ import yaml
 from constitutional_agent import Constitution
 from constitutional_agent.schema import SystemState
 
-
 HEALTHY = {
     "failing_tests": 0,
     "hours_since_last_execution": 4,
@@ -941,7 +940,7 @@ class TestFriaEvidence:
 
     def test_hc_violation_reflects_in_evidence(self):
         from constitutional_agent.fria import generate_fria_evidence
-        from constitutional_agent.schema import GateState, GateResult
+        from constitutional_agent.schema import GateResult, GateState
         gate_results = [
             GateResult(gate="RiskGate", state=GateState.PASS, reason="ok"),
             GateResult(gate="EpistemicGate", state=GateState.PASS, reason="ok"),

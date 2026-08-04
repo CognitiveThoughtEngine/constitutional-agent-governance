@@ -34,8 +34,9 @@ Usage:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 
 @dataclass
@@ -63,7 +64,7 @@ class HardConstraint:
         """Return True if this constraint is violated in the given context."""
         try:
             return bool(self.check(context))
-        except Exception:
+        except Exception:  # noqa: BLE001 — deliberately broad, see fail-CLOSED note below
             # Fail-CLOSED: if the check itself errors, treat as violated.
             # Safety checks must never silently pass due to implementation bugs.
             return True

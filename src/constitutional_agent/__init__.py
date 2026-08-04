@@ -37,17 +37,6 @@ Quick start:
 WHO governs identity. HOW governs behavior. WHY governs values.
 """
 
-from constitutional_agent.composition import (
-    AccumulatedRiskComposer,
-    ComposedEvaluator,
-    ComposedSystemResult,
-    CompositionResult,
-    InMemoryRiskStore,
-    RiskEvent,
-    RiskStore,
-    SqliteRiskStore,
-    default_risk_weight,
-)
 from constitutional_agent.authority import (
     AmendmentRecord,
     AmendmentStore,
@@ -60,6 +49,17 @@ from constitutional_agent.authority import (
     canonical_principal,
     redact_secrets,
     scrub_evidence,
+)
+from constitutional_agent.composition import (
+    AccumulatedRiskComposer,
+    ComposedEvaluator,
+    ComposedSystemResult,
+    CompositionResult,
+    InMemoryRiskStore,
+    RiskEvent,
+    RiskStore,
+    SqliteRiskStore,
+    default_risk_weight,
 )
 from constitutional_agent.constitution import (
     Constitution,
@@ -106,7 +106,7 @@ __author__ = "Cognitive Thought Engine LLC"
 __license__ = "MIT"
 __url__ = "https://github.com/CognitiveThoughtEngine/constitutional-agent-governance"
 
-__all__ = [
+__all__ = [  # noqa: RUF022 — grouped by concern with section comments, not alphabetized on purpose
     # Constitution — primary entry point
     "Constitution",
     "ConstitutionalViolation",

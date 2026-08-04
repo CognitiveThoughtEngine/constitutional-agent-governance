@@ -35,23 +35,25 @@ from __future__ import annotations
 
 import hashlib
 import json
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Callable, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 __all__ = [
+    "AmendmentRecord",
+    "AmendmentStore",
     "AuthorityLevel",
     "AuthorityRegistry",
     "IdentityVerifier",
-    "AmendmentRecord",
-    "AmendmentStore",
     "InMemoryAmendmentStore",
     "SqliteAmendmentStore",
-    "scrub_evidence",
-    "redact_secrets",
     "bounded_verifier",
     "canonical_principal",
+    "redact_secrets",
+    "scrub_evidence",
 ]
 
 
@@ -100,7 +102,7 @@ class AuthorityLevel(IntEnum):
     CONSTITUTIONAL_AUTHORITY = 3
 
     @classmethod
-    def coerce(cls, value: Any) -> "AuthorityLevel":
+    def coerce(cls, value: Any) -> AuthorityLevel:
         """
         Coerce a str / int / AuthorityLevel into an AuthorityLevel.
 
@@ -110,7 +112,9 @@ class AuthorityLevel(IntEnum):
         if isinstance(value, AuthorityLevel):
             return value
         if isinstance(value, bool):  # guard: bool is an int subclass
-            raise ValueError(f"Invalid authority level: {value!r}")
+            # ValueError, not TypeError (ruff TRY004): changing the exception type is a
+            # breaking change for published-package consumers already catching ValueError.
+            raise ValueError(f"Invalid authority level: {value!r}")  # noqa: TRY004
         if isinstance(value, int):
             return cls(value)
         if isinstance(value, str):
@@ -143,7 +147,7 @@ class AuthorityRegistry:
     are never treated as human-readable names.
     """
 
-    def __init__(self, mapping: Optional[dict[str, Any]] = None) -> None:
+    def __init__(self, mapping: dict[str, Any] | None = None) -> None:
         self._levels: dict[str, AuthorityLevel] = {}
         for pid, level in (mapping or {}).items():
             if level is None:
@@ -198,7 +202,7 @@ class AuthorityRegistry:
     def contains(self, principal_id: str) -> bool:
         return canonical_principal(principal_id) in self._levels
 
-    def level_of(self, principal_id: str) -> Optional[AuthorityLevel]:
+    def level_of(self, principal_id: str) -> AuthorityLevel | None:
         """Return the principal's level, or None if they are not registered.
 
         Lookup is by canonical principal id, so whitespace/case variants of the
@@ -210,7 +214,7 @@ class AuthorityRegistry:
         """Deterministic ``principal_id -> int`` view, for hashing/audit."""
         return {pid: int(lvl) for pid, lvl in sorted(self._levels.items())}
 
-    def with_changes(self, changes: dict[str, Any]) -> "AuthorityRegistry":
+    def with_changes(self, changes: dict[str, Any]) -> AuthorityRegistry:
         """
         Return a NEW registry with ``changes`` applied (does not mutate self).
 
@@ -280,7 +284,7 @@ class IdentityVerifier:
     """
 
     name: str
-    verify: Callable[[str, Optional[dict[str, Any]]], bool]
+    verify: Callable[[str, dict[str, Any] | None], bool]
 
 
 # ---------------------------------------------------------------------------
@@ -329,11 +333,11 @@ def redact_secrets(obj: Any) -> Any:
 
 
 def bounded_verifier(
-    verify: Callable[[str, Optional[dict[str, Any]]], Any],
+    verify: Callable[[str, dict[str, Any] | None], Any],
     timeout_seconds: float,
     *,
-    name: Optional[str] = None,
-) -> Callable[[str, Optional[dict[str, Any]]], bool]:
+    name: str | None = None,
+) -> Callable[[str, dict[str, Any] | None], bool]:
     """
     Wrap a verify callable so the caller waits at most ``timeout_seconds``.
 
@@ -355,7 +359,7 @@ def bounded_verifier(
         )
     """
 
-    def _bounded(principal_id: str, asserted_identity: Optional[dict[str, Any]]) -> bool:
+    def _bounded(principal_id: str, asserted_identity: dict[str, Any] | None) -> bool:
         executor = ThreadPoolExecutor(max_workers=1)
         try:
             future = executor.submit(verify, principal_id, asserted_identity)
@@ -363,7 +367,7 @@ def bounded_verifier(
                 result = future.result(timeout=timeout_seconds)
             except FutureTimeoutError:
                 return False  # fail-closed: caller waited long enough
-            except Exception:
+            except Exception:  # noqa: BLE001 — deliberately broad: any verifier error fails closed
                 return False  # fail-closed on any verifier error
             return result is True
         finally:
@@ -376,8 +380,8 @@ def bounded_verifier(
 
 
 def scrub_evidence(
-    evidence: Optional[dict[str, Any]],
-) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+    evidence: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, str | None]:
     """
     Return ``(scrubbed_evidence, evidence_hash)``.
 
@@ -421,22 +425,22 @@ class AmendmentRecord:
     outcome: str  # "RATIFIED" | "REJECTED"
     proposer_id: str
     ratifier_id: str
-    proposer_level: Optional[str]
-    ratifier_level: Optional[str]
+    proposer_level: str | None
+    ratifier_level: str | None
     required_authority: str
     identity_assurance: str  # "caller_asserted" | "externally_verified"
-    identity_verifier: Optional[str]
+    identity_verifier: str | None
     affected_paths: list[str]
-    proposed_at: Optional[str]
+    proposed_at: str | None
     decided_at: str
-    evidence: Optional[dict[str, Any]]
-    evidence_hash: Optional[str]
+    evidence: dict[str, Any] | None
+    evidence_hash: str | None
     constitution_hash_before: str
     constitution_hash_after: str
     constitution_version: int
     reason: str
     description: str = ""
-    changes: Optional[dict[str, Any]] = None
+    changes: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
