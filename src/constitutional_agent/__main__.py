@@ -55,7 +55,7 @@ def main() -> None:
         proposed_by="cli_demo",
     )
     print(f"\n{B}Amendment proposed:{Z} {aid}")
-    print("Pending ratification — not applied until ratified.\n")
+    print("Pending ratification - not applied until ratified.\n")
 
 
 if __name__ == "__main__":
