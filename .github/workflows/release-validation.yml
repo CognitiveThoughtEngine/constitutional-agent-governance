@@ -6,9 +6,9 @@ name: Release Validation
 
 on:
   push:
-    branches: [master, main, "release/**"]
+    branches: [main, "release/**"]
   pull_request:
-    branches: [master, main]
+    branches: [main]
   workflow_dispatch:
 
 jobs:

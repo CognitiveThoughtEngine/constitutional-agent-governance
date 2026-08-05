@@ -25,9 +25,9 @@ workflow and the artifact published are the same bytes**, and the build is
 
 ## Order of operations (do NOT skip or reorder)
 
-1. **Merge** the release-closure PR into `master`. Nothing is tagged yet; the
+1. **Merge** the release-closure PR into `main`. Nothing is tagged yet; the
    CHANGELOG still says `UNRELEASED` and the notes are still `-DRAFT`.
-2. **Release-prep PR (no direct commit to `master`).** Open a *small* PR that:
+2. **Release-prep PR (no direct commit to `main`).** Open a *small* PR that:
    - sets the CHANGELOG header `## [0.7.0] - UNRELEASED` → `## [0.7.0] - YYYY-MM-DD`
      (the actual date), and
    - renames `docs/release/v0.7.0-release-notes-DRAFT.md` →
@@ -77,7 +77,7 @@ workflow and the artifact published are the same bytes**, and the build is
 ## Never
 
 - Never tag a commit whose CHANGELOG still says `UNRELEASED`.
-- Never set the release date or finalize notes by a direct push to `master` — use the
+- Never set the release date or finalize notes by a direct push to `main` — use the
   reviewed release-prep PR (step 2).
 - Never rebuild between validation and upload — publish the validated artifacts.
 - Never tag before confirming the `pypi` environment has required reviewers and PyPI
