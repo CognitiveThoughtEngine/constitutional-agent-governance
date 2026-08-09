@@ -16,7 +16,7 @@ Your agent is authenticated (**WHO**) and inside its permissions (**HOW**). This
   <br><b><a href="https://youtu.be/vsNO-_HfDF8">▶ Watch the 60-second proof</a></b> — three individually-authorized actions compose to <code>HOLD</code> at the first threshold (a longer sequence escalates to <code>FREEZE</code>, as in the example below). Verified output; configured demonstration.
 </p>
 
-Extracted from HRAO-E, a live governed reference environment for constitutional governance. Informed three public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt). Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
+Extracted from HRAO-E, a live governed reference environment for constitutional governance. Informed three NIST-affiliated public comments: NIST AI 800-2, the Agent Identity RFI, and the NCCoE identity-and-authorization initiative. CAISI acknowledgment is documented for the first two. Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
 
 > **Maturity, honestly:** the six gates, execution states, and twelve hard constraints have shipped since v0.4; EU AI Act Article 27(1) FRIA-support evidence (a support package, not a complete FRIA) and an enforced amendment-authority protocol are current. Stateful _cross-session cumulative-risk composition_ — catching that specific aggregate — **shipped in v0.6.0** (the `composition` module; see below). It is new: exercised in unit tests and modeled on the measured AgentCore gap, but not yet hardened across as many production-days as the core gates.
 
@@ -584,7 +584,7 @@ This library is a portable extract from the HRAO-E Constitutional Framework — 
 
 The library ships HC-1 through HC-12 — the portable, organization-agnostic core. Additional HRAO-E-specific operational constraints are not included in the library.
 
-The framework has informed three public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt). Multiple preprints are published on Zenodo — see [Citation](#citation).
+The framework has informed three NIST-affiliated public comments: NIST AI 800-2, the Agent Identity RFI, and the NCCoE identity-and-authorization initiative. CAISI acknowledgment is documented for the first two; acknowledgment of receipt is not endorsement. Multiple preprints are published on Zenodo — see [Citation](#citation).
 
 **Self-assessment:** An April 2026 author self-assessment scored v0.4.0b3 at **63/100 (Early Implementation)** against [CGST v1.0](https://github.com/CognitiveThoughtEngine/cgst-framework). Ungoverned baseline: 6/100. This single internal assessment is illustrative, not independent validation. [Full report](https://cognitivethoughtengine.com/blog/cgst-self-assessment-constitutional-agent.html).
 

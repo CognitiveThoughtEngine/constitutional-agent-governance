@@ -7,6 +7,39 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.8.0] - 2026-08-09
+
+Release-and-render synchronization. No library behavior changes: this release exists
+because the published package description on PyPI still carried v0.7.0-era claims that
+the repository had already corrected. Installed artifacts now match the corrected
+evidence language.
+
+### Changed — Evidence-claim precision
+
+- **NIST public comments no longer collapsed into one filing.** "Informed three
+  public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt)"
+  implied that all three concerned AI 800-2 and that CAISI acknowledged all three.
+  Replaced in both README locations with: "Informed three NIST-affiliated public
+  comments: NIST AI 800-2, the Agent Identity RFI, and the NCCoE
+  identity-and-authorization initiative. CAISI acknowledgment is documented for the
+  first two." The Citation-section instance additionally notes that acknowledgment of
+  receipt is not endorsement. This matches the count already published in the
+  organization profile.
+- **Package description.** "WHY-layer constitutional governance for autonomous AI
+  agents" → "Runtime constitutional governance for autonomous AI agents: six gates,
+  twelve hard constraints, cross-session risk composition." The WHY-layer framing
+  predates the Enterprise Agent Architecture umbrella and no longer matches how the
+  library is positioned.
+
+### Changed — Release plumbing
+
+- Bumped the version pins that are duplicated outside `pyproject.toml`:
+  `scripts/check_package.py`, `scripts/release_smoke.py`, and the
+  `release-validation` artifact name. These are checked by CI against the built
+  distribution, so a missed pin fails the release rather than shipping silently.
+
+---
+
 ## [0.7.0] - 2026-07-19
 
 Turns the governance thesis from *recorded* into *enforced*: the amendment

@@ -113,7 +113,7 @@ jobs:
       - name: Upload artifacts + checksums
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
-          name: dist-v0.7.0
+          name: dist-v0.8.0
           path: |
             dist/*.whl
             dist/*.tar.gz
