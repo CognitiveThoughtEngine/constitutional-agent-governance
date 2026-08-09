@@ -26,7 +26,7 @@ import tarfile
 import zipfile
 
 NAME = "constitutional-agent"
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 DIST_INFO = f"constitutional_agent-{VERSION}.dist-info/"
 PKG_PREFIX = "constitutional_agent/"
 REQUIRES_PYTHON_MUST_CONTAIN = ">=3.11"
