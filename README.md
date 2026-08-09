@@ -576,7 +576,7 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 This library is a portable extract from the HRAO-E Constitutional Framework — a live governed reference environment for constitutional governance.
 
 **This library (verifiable from this repo):**
-- **243 test functions** across the six library test modules (253 collected cases), 0 failed
+- **Current test count and pass rate:** see the [Tests workflow](https://github.com/CognitiveThoughtEngine/constitutional-agent-governance/actions/workflows/tests.yml) (badge above) — reproducible with `pytest` against this repo
 - **12 hard constraints** (HC-1 through HC-12) enforced in code
 - **6 constitutional gates** (EG, RG, GG, EPG, AAG, CGG)
 - **Enforced amendment protocol** — separation of duties + authority levels + last-authority guard, with a durable audit record
