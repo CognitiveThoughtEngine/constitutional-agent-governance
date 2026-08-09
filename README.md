@@ -556,14 +556,11 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 - **Roadmap:** [ROADMAP.md](ROADMAP.md)
 
 **Background reading:**
-- **Introducing constitutional-agent** — the WHY layer, what it covers, and the agenthustler audit: [cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html](https://www.cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html)
-- **WHO vs HOW: the AI agent governance gap** — why identity + policy enforcement is not enough: [cteinvest.com/blog/who-vs-how-ai-agent-governance-gap.html](https://www.cteinvest.com/blog/who-vs-how-ai-agent-governance-gap.html)
-- **The Six-Gate Architecture** — how the gate system works and why the ordering matters: [cteinvest.com/blog/six-gate-architecture.html](https://www.cteinvest.com/blog/six-gate-architecture.html)
-- **Why AI safety code must fail-closed** — the principle behind hard constraint design: [cteinvest.com/blog/why-ai-safety-code-must-fail-closed.html](https://www.cteinvest.com/blog/why-ai-safety-code-must-fail-closed.html)
-- **Constitutional vs behavioral governance** — the structural difference between a gate and a policy rule: [cteinvest.com/blog/constitutional-vs-behavioral-agent-governance.html](https://www.cteinvest.com/blog/constitutional-vs-behavioral-agent-governance.html)
-
-**Professional assessment:**
-- **Constitutional Governance Review** (2-hour assessment, written report, top 3 gaps + remediation roadmap): [cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html#assessment](https://www.cteinvest.com/blog/constitutional-agent-open-source-why-layer-governance.html)
+- **Introducing constitutional-agent** — the WHY layer, what it covers, and the agenthustler audit: [cognitivethoughtengine.com/blog/constitutional-agent-open-source-why-layer-governance.html](https://cognitivethoughtengine.com/blog/constitutional-agent-open-source-why-layer-governance.html)
+- **WHO vs HOW: the AI agent governance gap** — why identity + policy enforcement is not enough: [cognitivethoughtengine.com/blog/who-vs-how-ai-agent-governance-gap.html](https://cognitivethoughtengine.com/blog/who-vs-how-ai-agent-governance-gap.html)
+- **The Six-Gate Architecture** — how the gate system works and why the ordering matters: [cognitivethoughtengine.com/blog/six-gate-architecture.html](https://cognitivethoughtengine.com/blog/six-gate-architecture.html)
+- **Why AI safety code must fail-closed** — the principle behind hard constraint design: [cognitivethoughtengine.com/blog/why-ai-safety-code-must-fail-closed.html](https://cognitivethoughtengine.com/blog/why-ai-safety-code-must-fail-closed.html)
+- **Constitutional vs behavioral governance** — the structural difference between a gate and a policy rule: [cognitivethoughtengine.com/blog/constitutional-vs-behavioral-agent-governance.html](https://cognitivethoughtengine.com/blog/constitutional-vs-behavioral-agent-governance.html)
 
 **Research preprints (DOI):**
 - Constitutional Self-Governance — the six-gate model (production study): [10.5281/zenodo.19162104](https://doi.org/10.5281/zenodo.19162104)
@@ -589,7 +586,7 @@ The library ships HC-1 through HC-12 — the portable, organization-agnostic cor
 
 The framework has informed three public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt). Multiple preprints are published on Zenodo — see [Citation](#citation).
 
-**Self-assessment:** We ran the Constitutional AI Governance Stress Test (CGST) on this library before offering it as a service. Score: **63/100 (Governance Draft)**. Ungoverned baseline: 6/100. [Full report](https://www.cteinvest.com/blog/cgst-self-assessment-constitutional-agent.html).
+**Self-assessment:** An April 2026 author self-assessment scored v0.4.0b3 at **63/100 (Early Implementation)** against [CGST v1.0](https://github.com/CognitiveThoughtEngine/cgst-framework). Ungoverned baseline: 6/100. This single internal assessment is illustrative, not independent validation. [Full report](https://cognitivethoughtengine.com/blog/cgst-self-assessment-constitutional-agent.html).
 
 ---
 
