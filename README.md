@@ -16,7 +16,7 @@ Your agent is authenticated (**WHO**) and inside its permissions (**HOW**). This
   <br><b><a href="https://youtu.be/vsNO-_HfDF8">▶ Watch the 60-second proof</a></b> — three individually-authorized actions compose to <code>HOLD</code> at the first threshold (a longer sequence escalates to <code>FREEZE</code>, as in the example below). Verified output; configured demonstration.
 </p>
 
-Extracted from HRAO-E, a production reference implementation of constitutional governance. Informed three public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt). Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
+Extracted from HRAO-E, a live governed reference environment for constitutional governance. Informed three public-comment submissions concerning NIST AI 800-2 (CAISI acknowledged receipt). Grounded in a measured gap — a live agent-payment preview showed per-session spend caps that hold individually but [don't compose across concurrent sessions](https://dev.to/mspro3210/the-spend-cap-worked-the-risk-budget-didnt-compose-13n1) — the exact failure decision governance targets.
 
 > **Maturity, honestly:** the six gates, execution states, and twelve hard constraints have shipped since v0.4; EU AI Act Article 27(1) FRIA-support evidence (a support package, not a complete FRIA) and an enforced amendment-authority protocol are current. Stateful _cross-session cumulative-risk composition_ — catching that specific aggregate — **shipped in v0.6.0** (the `composition` module; see below). It is new: exercised in unit tests and modeled on the measured AgentCore gap, but not yet hardened across as many production-days as the core gates.
 
@@ -134,7 +134,7 @@ print(result.system_state.value)  # -> RUN
 - **Platform teams** embedding agents into production systems that make autonomous decisions affecting real outcomes
 - **Agent framework builders** who need a governance layer above identity and policy enforcement
 - **Enterprise architects** evaluating autonomous AI deployment risk and liability exposure
-- **Teams that need EU AI Act Article 27 FRIA evidence** generated programmatically from live evaluation data
+- **Teams that need EU AI Act Article 27 FRIA-support evidence** (not a complete FRIA) generated programmatically from live evaluation data
 
 If your agent answers questions only, with no economic or operational authority, this library is likely more than you need. If your agent executes, spends, publishes, or decides — read on.
 
@@ -197,7 +197,7 @@ WHO governance gets the agent through the door. HOW governance enforces the rule
 
 **Use this when:**
 - Your agent makes autonomous decisions that affect real economic, operational, or reputational outcomes
-- You need governance evidence for compliance (EU AI Act, NIST AI RMF, internal audit)
+- You need governance evidence supporting compliance analysis (EU AI Act, NIST AI RMF, internal audit)
 - You need a principled FREEZE/STOP mechanism, not just a policy lookup
 - You want gates to cover scenarios your policy writers haven't written rules for yet
 
@@ -471,7 +471,7 @@ Detects when an agent is optimizing for governance metrics rather than underlyin
 
 **EconomicGate** — Prevents financial ruin
 
-The only open-source governance gate that evaluates financial sustainability. Two modes: `pre_revenue` (value creation metrics: return rate, completion rate, runway) and `post_revenue` (unit economics: margin, CAC, churn, LTV:CAC). Runway floor is enforced in both modes.
+In our dated documentation survey, we did not identify another open-source governance gate that evaluates financial sustainability. Two modes: `pre_revenue` (value creation metrics: return rate, completion rate, runway) and `post_revenue` (unit economics: margin, CAC, churn, LTV:CAC). Runway floor is enforced in both modes.
 
 **AutonomyGate** — Ensures Level 4+ operation
 
@@ -573,7 +573,7 @@ See [governance.yaml](governance.yaml) for the full schema with all configurable
 
 ## The Reference Implementation
 
-This library is a portable extract from the HRAO-E Constitutional Framework — a production reference implementation of constitutional governance.
+This library is a portable extract from the HRAO-E Constitutional Framework — a live governed reference environment for constitutional governance.
 
 **This library (verifiable from this repo):**
 - **243 test functions** across the six library test modules (253 collected cases), 0 failed
