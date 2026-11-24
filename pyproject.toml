@@ -4,9 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "constitutional-agent"
-version = "0.8.0"
+version = "0.8.1"
 description = "Runtime constitutional governance for autonomous AI agents: six gates, twelve hard constraints, cross-session risk composition"
 readme = "README.md"
+authors = [{name = "Michael K. Saleme", email = "research@cognitivethoughtengine.com"}]
 license = {text = "MIT"}
 requires-python = ">=3.11"
 keywords = ["ai", "agents", "governance", "constitutional", "llm", "autonomy"]

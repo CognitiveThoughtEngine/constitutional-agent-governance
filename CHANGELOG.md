@@ -7,6 +7,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.8.1] - 2026-11-24
+
+Packaging metadata only. No library behavior changes.
+
+### Changed
+
+- **Author metadata.** `pyproject.toml` had no `authors` field, so the PyPI project page
+  showed no author. Added Michael K. Saleme, matching `CITATION.cff` (ORCID
+  0009-0003-6736-1900).
+
+---
+
 ## [0.8.0] - 2026-08-09
 
 Release-and-render synchronization. No library behavior changes: this release exists
